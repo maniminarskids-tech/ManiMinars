@@ -1,0 +1,6 @@
+{
+  "name": "Mani Minars",
+  "description": "Minimalist split-screen kidswear e-commerce website for Mani Minars featuring Little Loom Kids (0–10Y) and Little Loom Juniors (11–16Y) with PKR pricing and full shopping experience.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
