@@ -1,7 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useProducts, FALLBACK_GARMENT_IMAGE } from '../context/ProductContext';
-import { Product, Order, OrderStatus, Category, AgeGroup } from '../types';
+import { Product, Order, OrderStatus, Category, AgeGroup, Coupon } from '../types';
+import { logoutAdmin, ADMIN_PASSCODE } from '../utils/security';
+export { ADMIN_PASSCODE };
+import { AVAILABLE_COUPONS } from '../context/CartContext';
 import {
   Package,
   Truck,
@@ -30,9 +33,12 @@ import {
   RefreshCw,
   Link as LinkIcon,
   Ruler,
+  Tag,
+  Boxes,
+  Minus,
+  LogOut,
+  AlertTriangle,
 } from 'lucide-react';
-
-const ADMIN_PASSCODE = 'mani2026';
 
 const KIDS_PRESET_SIZES = ['1-2Y', '2-3Y', '3-4Y', '4-5Y', '5-6Y', '6-7Y', '7-8Y', '8-9Y', '9-10Y'];
 const JUNIORS_PRESET_SIZES = ['11-12Y', '12-13Y', '13-14Y', '14-15Y', '15-16Y'];
@@ -97,6 +103,7 @@ export const AdminPage: React.FC = () => {
     addProduct,
     updateProduct,
     deleteProduct,
+    updateProductStock,
     resetProductsToDefault,
     orders,
     updateOrderStatus,
@@ -105,15 +112,8 @@ export const AdminPage: React.FC = () => {
     updateDeliverySettings,
   } = useProducts();
 
-  // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return sessionStorage.getItem('mm_admin_auth') === 'true';
-  });
-  const [passcodeInput, setPasscodeInput] = useState('');
-  const [authError, setAuthError] = useState('');
-
-  // Tab State: 'products' | 'deliveries' | 'settings'
-  const [activeTab, setActiveTab] = useState<'products' | 'deliveries' | 'settings'>('products');
+  // Tab State: 'products' | 'inventory' | 'deliveries' | 'coupons' | 'settings'
+  const [activeTab, setActiveTab] = useState<'products' | 'inventory' | 'deliveries' | 'coupons' | 'settings'>('products');
 
   // Product management modal / form state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -129,12 +129,15 @@ export const AdminPage: React.FC = () => {
     isNew: true,
     ageGroup: 'kids' as AgeGroup,
     category: 'sets' as Category,
-    sizes: ['2–3Y', '3–4Y', '4–5Y'],
+    sizes: ['2-3Y', '3-4Y', '4-5Y'],
     fabric: '100% Combed Pakistani Cotton',
     imageUrl:
       'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=800&q=80',
     colorName: 'Sunset Coral',
     colorHex: '#E84D3D',
+    stockQuantity: 25,
+    sku: 'MM-KID-101',
+    lowStockThreshold: 5,
     description:
       'Soft and breathable organic cotton silhouette handcrafted for active, joyful days.',
     details: [
@@ -153,9 +156,12 @@ export const AdminPage: React.FC = () => {
 
   // Size editing state
   const [customSizeInput, setCustomSizeInput] = useState('');
+  const [editingSizeIndex, setEditingSizeIndex] = useState<number | null>(null);
+  const [editingSizeText, setEditingSizeText] = useState('');
 
   // Product search filter
   const [productSearch, setProductSearch] = useState('');
+  const [inventorySearch, setInventorySearch] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
 
@@ -168,21 +174,32 @@ export const AdminPage: React.FC = () => {
   });
   const [settingsSavedMessage, setSettingsSavedMessage] = useState(false);
 
-  // Auth Submit
-  const handleAuthSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passcodeInput === ADMIN_PASSCODE || passcodeInput === 'minars815') {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('mm_admin_auth', 'true');
-      setAuthError('');
-    } else {
-      setAuthError('Incorrect passcode. Please enter the valid admin passcode.');
-    }
+  const handleLogout = () => {
+    logoutAdmin();
+    window.location.reload();
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    sessionStorage.removeItem('mm_admin_auth');
+  const handleStartEditSize = (index: number, currentText: string) => {
+    setEditingSizeIndex(index);
+    setEditingSizeText(currentText);
+  };
+
+  const handleSaveEditedSize = (index: number) => {
+    const clean = editingSizeText.trim();
+    if (clean) {
+      setProductForm((prev) => {
+        const nextSizes = [...prev.sizes];
+        nextSizes[index] = clean;
+        return { ...prev, sizes: nextSizes };
+      });
+    }
+    setEditingSizeIndex(null);
+    setEditingSizeText('');
+  };
+
+  const handleCancelEditSize = () => {
+    setEditingSizeIndex(null);
+    setEditingSizeText('');
   };
 
   // Image Upload handler (processes file, scales/compresses, sets preview)
@@ -294,6 +311,9 @@ export const AdminPage: React.FC = () => {
       imageUrl: '',
       colorName: 'Sunset Coral',
       colorHex: '#E84D3D',
+      stockQuantity: 25,
+      sku: `MM-KID-${Math.floor(100 + Math.random() * 900)}`,
+      lowStockThreshold: 5,
       description:
         'Soft, breathable organic cotton silhouette handcrafted for active, joyful days in Pakistan.',
       details: [
@@ -325,6 +345,9 @@ export const AdminPage: React.FC = () => {
       imageUrl: product.images[0] || '',
       colorName: product.colors[0]?.name || 'Natural',
       colorHex: product.colors[0]?.hex || '#E84D3D',
+      stockQuantity: product.stockQuantity ?? 20,
+      sku: product.sku || `MM-${product.category.toUpperCase().slice(0, 3)}-${product.id.slice(-3)}`,
+      lowStockThreshold: product.lowStockThreshold ?? 5,
       description: product.description,
       details: product.details,
     });
@@ -345,6 +368,7 @@ export const AdminPage: React.FC = () => {
       productForm.imageUrl ||
       'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=800&q=80';
 
+    const stockQty = Number(productForm.stockQuantity ?? 25);
     const productPayload = {
       name: productForm.name,
       tagline: productForm.tagline,
@@ -355,6 +379,10 @@ export const AdminPage: React.FC = () => {
       ageGroup: productForm.ageGroup,
       category: productForm.category,
       sizes: productForm.sizes,
+      stockQuantity: stockQty,
+      sku: productForm.sku || undefined,
+      lowStockThreshold: Number(productForm.lowStockThreshold ?? 5),
+      inStock: stockQty > 0,
       colors: [
         {
           name: productForm.colorName,
@@ -403,6 +431,14 @@ export const AdminPage: React.FC = () => {
       p.ageGroup.toLowerCase().includes(productSearch.toLowerCase())
   );
 
+  // Filtered inventory list
+  const filteredInventory = products.filter(
+    (p) =>
+      p.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+      p.category.toLowerCase().includes(inventorySearch.toLowerCase()) ||
+      (p.sku && p.sku.toLowerCase().includes(inventorySearch.toLowerCase()))
+  );
+
   // Filtered orders list
   const filteredOrders = orders.filter((o) => {
     const matchesSearch =
@@ -418,83 +454,10 @@ export const AdminPage: React.FC = () => {
   const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
   const pendingDeliveries = orders.filter((o) => o.status === 'pending' || o.status === 'dispatched')
     .length;
+  const lowStockCount = products.filter(
+    (p) => (p.stockQuantity ?? 20) <= (p.lowStockThreshold ?? 5)
+  ).length;
 
-  // Render Login Lock Screen if not authenticated
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FAF9F6] p-4">
-        <div className="w-full max-w-md bg-white rounded-3xl p-8 border border-neutral-200/80 shadow-xl text-center">
-          <div className="w-14 h-14 rounded-2xl bg-[#E84D3D]/10 text-[#E84D3D] flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-7 h-7" />
-          </div>
-
-          <span className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-            Internal Operations
-          </span>
-          <h1 className="font-logo font-bold text-2xl text-neutral-900 mt-1 mb-2">
-            Mani Minars Admin
-          </h1>
-          <p className="text-xs text-neutral-500 mb-6 leading-relaxed">
-            Manage inventory, add/remove garments, dispatch couriers, and track nationwide deliveries across Pakistan.
-          </p>
-
-          <form onSubmit={handleAuthSubmit} className="space-y-4 text-left">
-            <div>
-              <label className="block text-xs font-bold uppercase tracking-wider text-neutral-700 mb-1.5">
-                Secret Passcode
-              </label>
-              <input
-                type="password"
-                required
-                value={passcodeInput}
-                onChange={(e) => setPasscodeInput(e.target.value)}
-                placeholder="Enter passcode (e.g. mani2026)"
-                className="w-full text-sm px-4 py-3 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D]"
-              />
-            </div>
-
-            {authError && (
-              <p className="text-xs text-red-500 flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4" />
-                <span>{authError}</span>
-              </p>
-            )}
-
-            <button
-              type="submit"
-              className="w-full py-3.5 px-6 rounded-xl bg-[#1E1E1E] hover:bg-black text-white text-xs font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2"
-            >
-              <Unlock className="w-4 h-4" />
-              <span>Unlock Secret Portal</span>
-            </button>
-          </form>
-
-          {/* Convenient Demo Access Hint */}
-          <div className="mt-6 pt-6 border-t border-neutral-100 flex items-center justify-between text-xs text-neutral-400">
-            <span>Passcode: <code className="bg-neutral-100 px-1.5 py-0.5 rounded text-neutral-800 font-bold">mani2026</code></span>
-            <button
-              type="button"
-              onClick={() => {
-                setIsAuthenticated(true);
-                sessionStorage.setItem('mm_admin_auth', 'true');
-              }}
-              className="text-[#E84D3D] font-bold hover:underline"
-            >
-              1-Click Demo Login
-            </button>
-          </div>
-
-          <div className="mt-4">
-            <Link to="/" className="text-xs text-neutral-400 hover:text-neutral-700">
-              ← Return to Mani Minars Storefront
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Authenticated Admin Portal
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F5F2] text-neutral-900">
       {/* Top Admin Navigation Header */}
@@ -1399,20 +1362,66 @@ Delivery Address: ${order.customer.address}, ${order.customer.city}`;
                   </div>
                   {productForm.sizes.length > 0 ? (
                     <div className="flex flex-wrap gap-1.5">
-                      {productForm.sizes.map((sz) => (
+                      {productForm.sizes.map((sz, idx) => (
                         <span
-                          key={sz}
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-900 text-white text-xs font-bold"
+                          key={`${sz}-${idx}`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900 text-white text-xs font-bold"
                         >
-                          <span>{sz}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSize(sz)}
-                            className="hover:bg-neutral-700 rounded p-0.5 transition-colors cursor-pointer"
-                            title={`Remove ${sz}`}
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+                          {editingSizeIndex === idx ? (
+                            <div className="flex items-center gap-1">
+                              <input
+                                type="text"
+                                value={editingSizeText}
+                                onChange={(e) => setEditingSizeText(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveEditedSize(idx);
+                                  } else if (e.key === 'Escape') {
+                                    handleCancelEditSize();
+                                  }
+                                }}
+                                autoFocus
+                                className="w-16 px-1.5 py-0.5 text-xs bg-neutral-800 text-white border border-neutral-600 rounded outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEditedSize(idx)}
+                                className="text-green-400 hover:text-green-300 p-0.5 cursor-pointer"
+                                title="Save size"
+                              >
+                                <Check className="w-3 h-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleCancelEditSize}
+                                className="text-neutral-400 hover:text-white p-0.5 cursor-pointer"
+                                title="Cancel"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <span>{sz}</span>
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditSize(idx, sz)}
+                                className="text-neutral-400 hover:text-[#F5BE38] p-0.5 transition-colors cursor-pointer"
+                                title={`Edit size ${sz}`}
+                              >
+                                <Edit className="w-2.5 h-2.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveSize(sz)}
+                                className="text-neutral-400 hover:text-red-400 rounded p-0.5 transition-colors cursor-pointer"
+                                title={`Remove ${sz}`}
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </>
+                          )}
                         </span>
                       ))}
                     </div>
@@ -1478,6 +1487,56 @@ Delivery Address: ${order.customer.address}, ${order.customer.city}`;
                     />
                     <span className="font-bold">New Arrival</span>
                   </label>
+                </div>
+              </div>
+
+              {/* Inventory & Stock Tracking */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-neutral-50 rounded-2xl border border-neutral-200/80">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
+                    Warehouse Stock Units *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={productForm.stockQuantity}
+                    onChange={(e) =>
+                      setProductForm({ ...productForm, stockQuantity: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] bg-white text-xs font-bold"
+                  />
+                  <span className="text-[10px] text-neutral-400">Total units available</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
+                    Low Stock Alert Level
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={productForm.lowStockThreshold}
+                    onChange={(e) =>
+                      setProductForm({ ...productForm, lowStockThreshold: Number(e.target.value) })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] bg-white text-xs font-bold"
+                  />
+                  <span className="text-[10px] text-neutral-400">Triggers low-stock warning</span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
+                    SKU / Tracking Code
+                  </label>
+                  <input
+                    type="text"
+                    value={productForm.sku}
+                    onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })}
+                    placeholder="e.g. MM-KID-104"
+                    className="w-full px-3 py-2 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] bg-white text-xs font-mono"
+                  />
+                  <span className="text-[10px] text-neutral-400">Warehouse code</span>
                 </div>
               </div>
 

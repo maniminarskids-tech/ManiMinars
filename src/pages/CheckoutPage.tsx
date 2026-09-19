@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export const CheckoutPage: React.FC = () => {
-  const { cart, subtotal, deliveryFee, total, discount, clearCart } = useCart();
+  const { cart, subtotal, deliveryFee, total, discount, promoCode, shippingTier, clearCart } = useCart();
   const { addOrder, deliverySettings } = useProducts();
   const navigate = useNavigate();
 
@@ -33,7 +33,15 @@ export const CheckoutPage: React.FC = () => {
     notes: 'Please call before delivery.',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'card' | 'wallet'>('cod');
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'card' | 'wallet' | 'bank_transfer'>('cod');
+  const [walletProvider, setWalletProvider] = useState<'JazzCash' | 'EasyPaisa' | 'SadaPay'>('JazzCash');
+  const [walletPhone, setWalletPhone] = useState('03046466815');
+  const [cardDetails, setCardDetails] = useState({
+    name: 'Fatima Malik',
+    number: '•••• •••• •••• 4242',
+    expiry: '12/28',
+    cvv: '•••',
+  });
   const [isProcessing, setIsProcessing] = useState(false);
   const [orderComplete, setOrderComplete] = useState(false);
   const [orderId, setOrderId] = useState('');
@@ -70,13 +78,13 @@ export const CheckoutPage: React.FC = () => {
       const generatedId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
       setOrderId(generatedId);
 
-      // Save order to live system so it reflects in Secret Admin portal
+      // Save order to live system so it reflects in Secret Admin portal & stock automatically decreases
       const newOrder: Order = {
         id: generatedId,
         createdAt: new Date().toISOString(),
         customer: {
           fullName: formData.fullName,
-          phone: `+92${formData.phone}`,
+          phone: `+92${formData.phone.replace(/^0+/, '')}`,
           email: formData.email,
           city: formData.city,
           address: formData.address,
@@ -88,6 +96,9 @@ export const CheckoutPage: React.FC = () => {
         discount,
         total,
         paymentMethod,
+        paymentStatus: paymentMethod === 'cod' ? 'pending' : 'completed',
+        shippingTier,
+        couponCode: promoCode || undefined,
         status: 'pending',
         courier: deliverySettings.courierName,
       };
@@ -401,10 +412,67 @@ export const CheckoutPage: React.FC = () => {
                           <CreditCard className="w-4 h-4 text-blue-600" />
                           Credit / Debit Card (Visa / Mastercard)
                         </span>
+                        <span className="text-[10px] text-neutral-500 font-medium">3D Secure 2.0</span>
                       </div>
                       <p className="text-[11px] text-neutral-500 mt-0.5">
-                        Instant, secure 3D-verified transaction via Pakistani banks.
+                        Instant, secure 3D-verified transaction via Pakistani & International banks.
                       </p>
+
+                      {/* Interactive Card Details Form */}
+                      {paymentMethod === 'card' && (
+                        <div className="mt-3 pt-3 border-t border-orange-200/60 space-y-2.5">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-neutral-600 mb-1">
+                              Cardholder Name
+                            </label>
+                            <input
+                              type="text"
+                              value={cardDetails.name}
+                              onChange={(e) => setCardDetails({ ...cardDetails, name: e.target.value })}
+                              placeholder="Name on card"
+                              className="w-full text-xs px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg outline-none focus:ring-1 focus:ring-[#E84D3D]"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="col-span-2">
+                              <label className="block text-[10px] font-bold uppercase text-neutral-600 mb-1">
+                                Card Number
+                              </label>
+                              <input
+                                type="text"
+                                value={cardDetails.number}
+                                onChange={(e) => setCardDetails({ ...cardDetails, number: e.target.value })}
+                                placeholder="0000 0000 0000 0000"
+                                maxLength={19}
+                                className="w-full text-xs px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg outline-none focus:ring-1 focus:ring-[#E84D3D] font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase text-neutral-600 mb-1">
+                                Expiry / CVV
+                              </label>
+                              <div className="flex gap-1">
+                                <input
+                                  type="text"
+                                  value={cardDetails.expiry}
+                                  onChange={(e) => setCardDetails({ ...cardDetails, expiry: e.target.value })}
+                                  placeholder="MM/YY"
+                                  maxLength={5}
+                                  className="w-1/2 text-xs px-1.5 py-1.5 bg-white border border-neutral-300 rounded-lg outline-none text-center font-mono"
+                                />
+                                <input
+                                  type="password"
+                                  value={cardDetails.cvv}
+                                  onChange={(e) => setCardDetails({ ...cardDetails, cvv: e.target.value })}
+                                  placeholder="CVV"
+                                  maxLength={4}
+                                  className="w-1/2 text-xs px-1.5 py-1.5 bg-white border border-neutral-300 rounded-lg outline-none text-center font-mono"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </label>
 
@@ -427,12 +495,46 @@ export const CheckoutPage: React.FC = () => {
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-xs text-neutral-900 flex items-center gap-1.5">
                           <Smartphone className="w-4 h-4 text-[#F5BE38]" />
-                          JazzCash / EasyPaisa Mobile Wallet
+                          Mobile Wallet (JazzCash / EasyPaisa / SadaPay)
                         </span>
                       </div>
                       <p className="text-[11px] text-neutral-500 mt-0.5">
                         Direct authorization from your mobile wallet account.
                       </p>
+
+                      {/* Interactive Mobile Wallet Setup */}
+                      {paymentMethod === 'wallet' && (
+                        <div className="mt-3 pt-3 border-t border-orange-200/60 space-y-2">
+                          <div className="flex gap-2">
+                            {(['JazzCash', 'EasyPaisa', 'SadaPay'] as const).map((prov) => (
+                              <button
+                                key={prov}
+                                type="button"
+                                onClick={() => setWalletProvider(prov)}
+                                className={`text-[11px] px-3 py-1 rounded-lg font-bold transition-colors cursor-pointer ${
+                                  walletProvider === prov
+                                    ? 'bg-neutral-900 text-white'
+                                    : 'bg-white border border-neutral-200 text-neutral-700'
+                                }`}
+                              >
+                                {prov}
+                              </button>
+                            ))}
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase text-neutral-600 mb-1">
+                              Registered Mobile Account Number
+                            </label>
+                            <input
+                              type="tel"
+                              value={walletPhone}
+                              onChange={(e) => setWalletPhone(e.target.value)}
+                              placeholder="03001234567"
+                              className="w-full text-xs px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg outline-none font-mono focus:ring-1 focus:ring-[#E84D3D]"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </label>
                 </div>

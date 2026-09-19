@@ -6,6 +6,8 @@ interface ProductContextType {
   products: Product[];
   addProduct: (newProduct: Omit<Product, 'id'>) => Product;
   updateProduct: (id: string, updated: Partial<Product>) => void;
+  updateProductStock: (id: string, newStock: number) => void;
+  reduceStockForOrder: (order: Order) => void;
   deleteProduct: (id: string) => void;
   resetProductsToDefault: () => void;
   orders: Order[];
@@ -23,9 +25,11 @@ interface ProductContextType {
 
 const DEFAULT_DELIVERY: DeliverySettings = {
   standardDeliveryFee: 250,
+  expressDeliveryFee: 450,
   freeShippingThreshold: 4000,
-  courierName: 'Trax Logistics & TCS',
+  courierName: 'Trax Logistics & TCS Express',
   estimatedDeliveryDays: '2–4 Business Days',
+  expressDeliveryDays: '1–2 Business Days',
 };
 
 export const FALLBACK_GARMENT_IMAGE =
@@ -52,16 +56,23 @@ export function sanitizeGarmentImageUrl(url: string | undefined): string {
 
 export function sanitizeProducts(prods: Product[]): Product[] {
   if (!Array.isArray(prods) || prods.length === 0) return DEFAULT_PRODUCTS;
-  return prods.map((p) => ({
-    ...p,
-    colors: (p.colors || []).map((c) => ({
-      ...c,
-      image: sanitizeGarmentImageUrl(c.image),
-    })),
-    images: (p.images && p.images.length > 0 ? p.images : [FALLBACK_GARMENT_IMAGE]).map((img) =>
-      sanitizeGarmentImageUrl(img)
-    ),
-  }));
+  return prods.map((p, idx) => {
+    const stock = typeof p.stockQuantity === 'number' ? p.stockQuantity : Math.max(4, 20 - (idx * 2));
+    return {
+      ...p,
+      sku: p.sku || `MM-${p.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase() || 'GARMENT'}`,
+      stockQuantity: stock,
+      lowStockThreshold: p.lowStockThreshold || 5,
+      inStock: stock > 0,
+      colors: (p.colors || []).map((c) => ({
+        ...c,
+        image: sanitizeGarmentImageUrl(c.image),
+      })),
+      images: (p.images && p.images.length > 0 ? p.images : [FALLBACK_GARMENT_IMAGE]).map((img) =>
+        sanitizeGarmentImageUrl(img)
+      ),
+    };
+  });
 }
 
 // Initial realistic Pakistani mock orders for the admin portal
@@ -247,8 +258,56 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Update Product
   const updateProduct = (id: string, updated: Partial<Product>) => {
     setProducts((prev) =>
-      prev.map((prod) => (prod.id === id ? { ...prod, ...updated } : prod))
+      prev.map((prod) => {
+        if (prod.id !== id) return prod;
+        const next = { ...prod, ...updated };
+        if (typeof next.stockQuantity === 'number') {
+          next.inStock = next.stockQuantity > 0;
+        }
+        return next;
+      })
     );
+  };
+
+  // Update specific product stock
+  const updateProductStock = (id: string, newStock: number) => {
+    const safeStock = Math.max(0, Math.floor(newStock));
+    setProducts((prev) =>
+      prev.map((prod) =>
+        prod.id === id
+          ? {
+              ...prod,
+              stockQuantity: safeStock,
+              inStock: safeStock > 0,
+            }
+          : prod
+      )
+    );
+  };
+
+  // Deduct inventory when an order is placed
+  const reduceStockForOrder = (order: Order) => {
+    if (!order.items || order.items.length === 0) return;
+    setProducts((prev) => {
+      const itemMap = new Map<string, number>();
+      order.items.forEach((item) => {
+        const cur = itemMap.get(item.productId) || 0;
+        itemMap.set(item.productId, cur + item.quantity);
+      });
+
+      return prev.map((prod) => {
+        const orderedQty = itemMap.get(prod.id);
+        if (!orderedQty) return prod;
+
+        const currentStock = prod.stockQuantity ?? 15;
+        const remainingStock = Math.max(0, currentStock - orderedQty);
+        return {
+          ...prod,
+          stockQuantity: remainingStock,
+          inStock: remainingStock > 0,
+        };
+      });
+    });
   };
 
   // Delete Product
@@ -263,7 +322,10 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Orders methods
   const addOrder = (order: Order) => {
+    // 1. Record the order
     setOrders((prev) => [order, ...prev]);
+    // 2. Automatically decrease inventory for all items purchased
+    reduceStockForOrder(order);
   };
 
   const updateOrderStatus = (
@@ -301,6 +363,8 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         products,
         addProduct,
         updateProduct,
+        updateProductStock,
+        reduceStockForOrder,
         deleteProduct,
         resetProductsToDefault,
         orders,

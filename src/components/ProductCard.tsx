@@ -18,24 +18,38 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
 
   const activeColor = product.colors[selectedColorIndex] || product.colors[0];
   const activeImage = activeColor?.image || product.images[0];
+  const isOutOfStock = product.stockQuantity !== undefined && product.stockQuantity <= 0;
+  const isLowStock =
+    product.stockQuantity !== undefined &&
+    product.stockQuantity > 0 &&
+    product.stockQuantity <= (product.lowStockThreshold || 5);
 
   const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isOutOfStock) return;
+
     setIsQuickAdding(true);
 
     // Default to first available size
     const defaultSize = product.sizes[0] || 'Standard';
-    addToCart(product, defaultSize, {
+    const res = addToCart(product, defaultSize, {
       name: activeColor.name,
       hex: activeColor.hex,
     });
 
-    setQuickAddSuccess(true);
-    setTimeout(() => {
-      setQuickAddSuccess(false);
+    if (res.success) {
+      setQuickAddSuccess(true);
+      setTimeout(() => {
+        setQuickAddSuccess(false);
+        setIsQuickAdding(false);
+      }, 1200);
+    } else {
       setIsQuickAdding(false);
-    }, 1200);
+      if (res.message) {
+        alert(res.message);
+      }
+    }
   };
 
   return (
@@ -49,7 +63,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
           <img
             src={activeImage}
             alt={`${product.name} in ${activeColor.name}`}
-            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
+            className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out ${
+              isOutOfStock ? 'opacity-70 grayscale-[30%]' : ''
+            }`}
             loading="lazy"
             referrerPolicy="no-referrer"
             onError={(e) => {
@@ -63,6 +79,15 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
 
         {/* Badges */}
         <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10">
+          {isOutOfStock ? (
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-neutral-900 text-white shadow-sm">
+              Sold Out
+            </span>
+          ) : isLowStock ? (
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-500 text-white shadow-sm animate-pulse">
+              Only {product.stockQuantity} Left
+            </span>
+          ) : null}
           {product.isSale && (
             <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#E84D3D] text-white shadow-sm">
               Sale
@@ -86,15 +111,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
         <div className="absolute inset-x-2.5 bottom-2.5 hidden sm:flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 z-20">
           <button
             onClick={handleQuickAdd}
-            disabled={isQuickAdding}
-            className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5 transition-all ${
-              quickAddSuccess
+            disabled={isQuickAdding || isOutOfStock}
+            className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              isOutOfStock
+                ? 'bg-neutral-300 text-neutral-600 cursor-not-allowed'
+                : quickAddSuccess
                 ? 'bg-green-600 text-white'
                 : 'bg-[#1E1E1E] hover:bg-black text-white'
             }`}
-            aria-label={`Quick add ${product.name} to bag`}
+            aria-label={isOutOfStock ? `${product.name} is sold out` : `Quick add ${product.name} to bag`}
           >
-            {quickAddSuccess ? (
+            {isOutOfStock ? (
+              <span>Out of Stock</span>
+            ) : quickAddSuccess ? (
               <>
                 <Check className="w-4 h-4" />
                 <span>Added to Bag</span>

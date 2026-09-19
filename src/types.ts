@@ -11,6 +11,7 @@ export type Category =
 
 export interface Product {
   id: string;
+  sku?: string;
   name: string;
   tagline: string;
   price: number;
@@ -31,6 +32,9 @@ export interface Product {
   fabric: string;
   rating: number;
   reviewCount: number;
+  stockQuantity?: number;
+  lowStockThreshold?: number;
+  inStock?: boolean;
 }
 
 export interface CartItem {
@@ -46,6 +50,26 @@ export interface CartItem {
   price: number;
 }
 
+export interface Coupon {
+  code: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscount?: number;
+  description: string;
+  isActive: boolean;
+}
+
+export type ShippingTier = 'standard' | 'express';
+
+export interface ShippingOption {
+  id: ShippingTier;
+  name: string;
+  price: number;
+  estimatedDays: string;
+  description: string;
+}
+
 export interface FilterState {
   category: string;
   size: string;
@@ -58,6 +82,8 @@ export interface FilterState {
 export type SortOption = 'featured' | 'newest' | 'price-low' | 'price-high';
 
 export type OrderStatus = 'pending' | 'confirmed' | 'dispatched' | 'delivered' | 'cancelled';
+export type PaymentMethod = 'cod' | 'card' | 'wallet' | 'bank_transfer';
+export type PaymentStatus = 'pending' | 'completed' | 'failed';
 
 export interface Order {
   id: string;
@@ -75,7 +101,10 @@ export interface Order {
   deliveryFee: number;
   discount: number;
   total: number;
-  paymentMethod: 'cod' | 'card' | 'wallet';
+  paymentMethod: PaymentMethod;
+  paymentStatus?: PaymentStatus;
+  shippingTier?: ShippingTier;
+  couponCode?: string;
   status: OrderStatus;
   trackingNumber?: string;
   courier?: string;
@@ -83,7 +112,10 @@ export interface Order {
 
 export interface DeliverySettings {
   standardDeliveryFee: number;
+  expressDeliveryFee: number;
   freeShippingThreshold: number;
   courierName: string;
   estimatedDeliveryDays: string;
+  expressDeliveryDays: string;
 }
+
