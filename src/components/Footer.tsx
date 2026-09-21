@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, Phone, MapPin, Check, Heart, ShieldCheck, Truck, RefreshCw, Lock } from 'lucide-react';
+import { Mail, Phone, MapPin, Check, Heart, MessageCircle, Truck, RefreshCw, Lock } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -37,15 +37,20 @@ export const Footer: React.FC = () => {
               <p className="text-xs text-neutral-400">Hassle-free size and style swaps</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-neutral-800 text-[#7E9F85] flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-5 h-5" />
+          <a
+            href="https://wa.me/923046466815?text=Assalam-o-Alaikum%20Mani%20Minars!%20I%20would%20like%20fast%20delivery%20details%20in%20Pakistan."
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 group cursor-pointer transition-colors"
+          >
+            <div className="w-10 h-10 rounded-xl bg-neutral-800 text-[#25D366] group-hover:bg-[#25D366]/20 flex items-center justify-center shrink-0 transition-colors">
+              <MessageCircle className="w-5 h-5" />
             </div>
             <div>
-              <h5 className="text-xs font-bold uppercase tracking-wider text-white">Cash on Delivery (COD)</h5>
-              <p className="text-xs text-neutral-400">Pay at your doorstep anywhere in Pakistan</p>
+              <h5 className="text-xs font-bold uppercase tracking-wider text-white group-hover:text-[#25D366] transition-colors">For Fast Delivery</h5>
+              <p className="text-xs text-neutral-400">Contact directly on WhatsApp anywhere in Pakistan</p>
             </div>
-          </div>
+          </a>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-neutral-800 text-pink-400 flex items-center justify-center shrink-0">
               <Heart className="w-5 h-5" />
@@ -199,9 +204,6 @@ export const Footer: React.FC = () => {
             </Link>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-neutral-800 text-[10px] font-semibold text-neutral-300">
-              Cash on Delivery (COD)
-            </span>
             <span className="px-2 py-0.5 rounded bg-neutral-800 text-[10px] font-semibold text-neutral-300">
               Visa / Mastercard
             </span>

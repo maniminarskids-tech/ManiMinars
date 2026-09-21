@@ -386,7 +386,7 @@ export const CheckoutPage: React.FC = () => {
                         </span>
                       </div>
                       <p className="text-[11px] text-neutral-500 mt-0.5">
-                        Pay cash to the courier representative upon doorstep delivery.
+                        Pay cash to the courier representative upon delivery.
                       </p>
                     </div>
                   </label>

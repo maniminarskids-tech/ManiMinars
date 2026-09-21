@@ -399,7 +399,7 @@ export const CartPage: React.FC = () => {
 
               <div className="p-3 bg-neutral-50 rounded-xl text-center text-xs text-neutral-500 flex items-center justify-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-green-600" />
-                <span>Cash on Delivery available nationwide</span>
+                <span>Fast nationwide delivery across Pakistan</span>
               </div>
             </div>
           </div>

@@ -24,7 +24,7 @@ I would like to place a direct order for:
 🔢 *Quantity:* ${quantity}
 💰 *Total Price:* PKR ${totalPrice.toLocaleString()}
 ${currentUrl ? `🔗 *Product Link:* ${currentUrl}\n` : ''}
-Please confirm item availability and arrange Cash on Delivery (COD). Shukriya!`;
+Please confirm item availability and dispatch timeline. Shukriya!`;
 
   return `https://wa.me/${MANI_MINARS_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 }
@@ -55,7 +55,6 @@ ${itemsText}
 -------------------------
 🚚 *Delivery:* ${deliveryText}
 💰 *Total Payable:* PKR ${total.toLocaleString()}
-💵 *Payment Mode:* Cash on Delivery (COD)
 
 Please confirm my order and dispatch timeline. Shukriya!`;
 

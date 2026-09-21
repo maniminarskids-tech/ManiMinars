@@ -44,8 +44,6 @@ export const Header: React.FC<HeaderProps> = () => {
       <div className="bg-[#1E1E1E] text-white text-[11px] sm:text-xs tracking-wider uppercase py-1.5 px-4 text-center flex items-center justify-center gap-2 font-medium">
         <Sparkles className="w-3.5 h-3.5 text-[#F5BE38]" />
         <span>Free nationwide delivery across Pakistan on orders over PKR 4,000</span>
-        <span className="hidden md:inline text-white/50">•</span>
-        <span className="hidden md:inline text-white/80">Cash on Delivery (COD) Available</span>
       </div>
 
       {/* Main Sticky Header */}

@@ -296,7 +296,7 @@ export const ProductDetailPage: React.FC = () => {
               className="w-full mb-6 py-3.5 px-6 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs sm:text-sm font-bold uppercase tracking-wider transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2.5"
             >
               <MessageCircle className="w-5 h-5 fill-current" />
-              <span>Direct WhatsApp Order (COD)</span>
+              <span>Direct WhatsApp Order</span>
             </a>
 
             {/* Key Delivery Perks */}
@@ -307,7 +307,7 @@ export const ProductDetailPage: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-[#7E9F85]" />
-                <span>Cash on Delivery</span>
+                <span>Fast WhatsApp Support</span>
               </div>
             </div>
 
