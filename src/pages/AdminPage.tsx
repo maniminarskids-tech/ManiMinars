@@ -38,6 +38,7 @@ import {
   Minus,
   LogOut,
   AlertTriangle,
+  Database,
 } from 'lucide-react';
 
 const KIDS_PRESET_SIZES = ['1-2Y', '2-3Y', '3-4Y', '4-5Y', '5-6Y', '6-7Y', '7-8Y', '8-9Y', '9-10Y'];
@@ -110,7 +111,17 @@ export const AdminPage: React.FC = () => {
     deleteOrder,
     deliverySettings,
     updateDeliverySettings,
+    isCloudConnected,
+    refreshProducts,
   } = useProducts();
+
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    await refreshProducts();
+    setTimeout(() => setIsSyncing(false), 800);
+  };
 
   // Tab State: 'products' | 'inventory' | 'deliveries' | 'coupons' | 'settings'
   const [activeTab, setActiveTab] = useState<'products' | 'inventory' | 'deliveries' | 'coupons' | 'settings'>('products');
@@ -483,7 +494,39 @@ export const AdminPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3">
+          {/* Supabase Cloud Connection Status */}
+          <div
+            title={
+              isCloudConnected
+                ? 'Supabase Cloud Database connected and listening for real-time changes'
+                : 'Running on local offline cache. Set VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY to enable multi-device sync.'
+            }
+            className={`hidden md:inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${
+              isCloudConnected
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}
+          >
+            <Database className="w-3 h-3" />
+            <span>{isCloudConnected ? 'Supabase Synced' : 'Offline Cache'}</span>
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isCloudConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+              }`}
+            />
+          </div>
+
+          <button
+            onClick={handleManualSync}
+            disabled={isSyncing}
+            title="Sync products with Supabase Cloud"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-600 hover:text-neutral-900 px-2.5 py-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-[#E84D3D]' : ''}`} />
+            <span className="hidden sm:inline">Sync</span>
+          </button>
+
           <Link
             to="/"
             target="_blank"
