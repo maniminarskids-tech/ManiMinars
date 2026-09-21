@@ -12,14 +12,18 @@ interface ProductContextType {
   deleteProduct: (id: string) => Promise<void> | void;
   resetProductsToDefault: () => Promise<void> | void;
   orders: Order[];
-  addOrder: (order: Order) => void;
+  addOrder: (order: Order) => Promise<void>;
+  approveOrder: (orderId: string) => Promise<void>;
+  rejectOrder: (orderId: string) => Promise<void>;
   updateOrderStatus: (
     orderId: string,
     status: OrderStatus,
     trackingNumber?: string,
     courier?: string
-  ) => void;
-  deleteOrder: (orderId: string) => void;
+  ) => Promise<void>;
+  deleteOrder: (orderId: string) => Promise<void>;
+  refreshOrders: () => Promise<void>;
+  isOrdersLoading: boolean;
   deliverySettings: DeliverySettings;
   updateDeliverySettings: (settings: Partial<DeliverySettings>) => void;
   isLoading: boolean;
@@ -165,6 +169,103 @@ export function productToRow(product: Product): Record<string, any> {
   };
 }
 
+/**
+ * Bidirectional mapper: Order object -> Supabase database row
+ * Maps both exact requested column names (order_id, customer_name, products_json, etc.)
+ * and original helper columns for complete bidirectional compatibility.
+ */
+export function orderToRow(order: Order): Record<string, any> {
+  return {
+    // Primary identifier columns
+    order_id: order.id,
+    id: order.id,
+
+    // Customer fields
+    customer_name: order.customer?.fullName || '',
+    phone: order.customer?.phone || '',
+    email: order.customer?.email || '',
+    address: order.customer?.address || '',
+    city: order.customer?.city || '',
+    notes: order.customer?.notes || null,
+    customer: order.customer,
+
+    // Products / items
+    products_json: order.items || [],
+    items: order.items || [],
+
+    // Financial totals
+    subtotal: order.subtotal,
+    delivery_fee: order.deliveryFee,
+    discount: order.discount || 0,
+    total_amount: order.total,
+    total: order.total,
+
+    // Payment & verification fields
+    payment_method: order.paymentMethod,
+    payment_reference: order.paymentReference || null,
+    payment_proof_url: order.paymentProofImage || null,
+    payment_proof_image: order.paymentProofImage || null,
+    payment_status: order.paymentStatus || 'pending',
+
+    // Shipping & fulfillment
+    shipping_tier: order.shippingTier || 'standard',
+    coupon_code: order.couponCode || null,
+    status: order.status || 'Pending Verification',
+    tracking_number: order.trackingNumber || null,
+    courier: order.courier || null,
+
+    created_at: order.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+/**
+ * Bidirectional mapper: Supabase database row -> Order object
+ * Parses both new schema (order_id, customer_name, products_json) and previous columns.
+ */
+export function rowToOrder(row: any): Order {
+  const customer = row.customer
+    ? typeof row.customer === 'string'
+      ? JSON.parse(row.customer)
+      : row.customer
+    : {
+        fullName: row.customer_name || 'Customer',
+        phone: row.phone || '',
+        email: row.email || '',
+        city: row.city || 'Pakistan',
+        address: row.address || '',
+        notes: row.notes || undefined,
+      };
+
+  const rawProducts = row.products_json ?? row.items;
+  const items =
+    typeof rawProducts === 'string'
+      ? JSON.parse(rawProducts)
+      : Array.isArray(rawProducts)
+      ? rawProducts
+      : [];
+
+  return {
+    id: String(row.order_id || row.id),
+    createdAt: row.created_at || new Date().toISOString(),
+    customer,
+    items,
+    subtotal: Number(row.subtotal) || 0,
+    deliveryFee: Number(row.delivery_fee) || 0,
+    discount: Number(row.discount) || 0,
+    total: Number(row.total_amount ?? row.total) || 0,
+    paymentMethod: row.payment_method || 'bank_transfer',
+    paymentReference: row.payment_reference || undefined,
+    paymentProofImage: row.payment_proof_url ?? row.payment_proof_image ?? undefined,
+    paymentStatus: row.payment_status || 'pending',
+    shippingTier: row.shipping_tier || 'standard',
+    couponCode: row.coupon_code || undefined,
+    status: (row.status || 'Pending Verification') as OrderStatus,
+    trackingNumber: row.tracking_number || undefined,
+    courier: row.courier || undefined,
+  };
+}
+
 // Initial realistic Pakistani mock orders for the admin portal
 const INITIAL_ORDERS: Order[] = [
   {
@@ -204,7 +305,7 @@ const INITIAL_ORDERS: Order[] = [
     total: 5650,
     paymentMethod: 'bank_transfer',
     paymentReference: 'MB-948210341',
-    status: 'dispatched',
+    status: 'Approved',
     trackingNumber: 'TRX-7482910',
     courier: 'Trax Logistics',
   },
@@ -267,7 +368,7 @@ const INITIAL_ORDERS: Order[] = [
     total: 6900,
     paymentMethod: 'bank_transfer',
     paymentReference: 'MB-38190284',
-    status: 'pending',
+    status: 'Pending Verification',
   },
 ];
 
@@ -421,6 +522,78 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
     return INITIAL_ORDERS;
   });
+
+  const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(false);
+
+  // Fetch orders from Supabase orders table
+  const refreshOrders = useCallback(async () => {
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    try {
+      setIsOrdersLoading(true);
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        // Table might not exist yet or connection issue; retain local cache
+        console.warn('Supabase orders fetch notice:', error.message);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const remoteOrders = data.map(rowToOrder);
+        setOrders(remoteOrders);
+        try {
+          localStorage.setItem('mani_minars_orders_v1', JSON.stringify(remoteOrders));
+        } catch (err) {
+          console.error('Error caching remote orders:', err);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to sync orders with Supabase:', err);
+    } finally {
+      setIsOrdersLoading(false);
+    }
+  }, []);
+
+  // Subscribe to real-time order creations and updates from other devices / admin
+  useEffect(() => {
+    refreshOrders();
+
+    const supabase = getSupabase();
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('public:orders')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        (payload) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const newOrder = rowToOrder(payload.new);
+            setOrders((prev) => {
+              if (prev.some((o) => o.id === newOrder.id)) {
+                return prev.map((o) => (o.id === newOrder.id ? newOrder : o));
+              }
+              return [newOrder, ...prev];
+            });
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            const updated = rowToOrder(payload.new);
+            setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setOrders((prev) => prev.filter((o) => o.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshOrders]);
 
   // 5. Delivery Settings state
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>(() => {
@@ -636,13 +809,78 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Orders methods
-  const addOrder = (order: Order) => {
-    setOrders((prev) => [order, ...prev]);
-    reduceStockForOrder(order);
+  // Orders methods - fully integrated with Supabase and real-time syncing
+  const addOrder = async (order: Order) => {
+    // 1. Instantly update local state so order appears in admin panel immediately
+    setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
+    try {
+      const stored = localStorage.getItem('mani_minars_orders_v1');
+      const currentList: Order[] = stored ? JSON.parse(stored) : [];
+      const updatedList = [order, ...currentList.filter((o) => o.id !== order.id)];
+      localStorage.setItem('mani_minars_orders_v1', JSON.stringify(updatedList));
+    } catch (e) {
+      console.error('Error caching order locally:', e);
+    }
+
+    // 2. Reduce stock for items in catalog
+    await reduceStockForOrder(order);
+
+    // 3. Immediately persist order to Supabase orders table
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const row = orderToRow(order);
+        const { error } = await supabase.from('orders').upsert([row]);
+        if (error) {
+          console.error('Failed to save order to Supabase orders table:', error.message);
+        } else {
+          console.info('Order successfully saved to Supabase:', order.id);
+        }
+      } catch (err) {
+        console.error('Error saving order to Supabase:', err);
+      }
+    }
   };
 
-  const updateOrderStatus = (
+  const approveOrder = async (orderId: string) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: 'Approved' } : o))
+    );
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const updatePayload = { status: 'Approved', updated_at: new Date().toISOString() };
+        const res = await supabase.from('orders').update(updatePayload).eq('order_id', orderId);
+        if (res.error) {
+          await supabase.from('orders').update(updatePayload).eq('id', orderId);
+        }
+      } catch (err) {
+        console.error('Error approving order in Supabase:', err);
+      }
+    }
+  };
+
+  const rejectOrder = async (orderId: string) => {
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status: 'Rejected' } : o))
+    );
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const updatePayload = { status: 'Rejected', updated_at: new Date().toISOString() };
+        const res = await supabase.from('orders').update(updatePayload).eq('order_id', orderId);
+        if (res.error) {
+          await supabase.from('orders').update(updatePayload).eq('id', orderId);
+        }
+      } catch (err) {
+        console.error('Error rejecting order in Supabase:', err);
+      }
+    }
+  };
+
+  const updateOrderStatus = async (
     orderId: string,
     status: OrderStatus,
     trackingNumber?: string,
@@ -661,10 +899,41 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         return o;
       })
     );
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const updates: Record<string, any> = {
+          status,
+          updated_at: new Date().toISOString(),
+        };
+        if (trackingNumber !== undefined) updates.tracking_number = trackingNumber;
+        if (courier !== undefined) updates.courier = courier;
+
+        const res = await supabase.from('orders').update(updates).eq('order_id', orderId);
+        if (res.error) {
+          await supabase.from('orders').update(updates).eq('id', orderId);
+        }
+      } catch (err) {
+        console.error('Error updating order status in Supabase:', err);
+      }
+    }
   };
 
-  const deleteOrder = (orderId: string) => {
+  const deleteOrder = async (orderId: string) => {
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
+
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const res = await supabase.from('orders').delete().eq('order_id', orderId);
+        if (res.error) {
+          await supabase.from('orders').delete().eq('id', orderId);
+        }
+      } catch (err) {
+        console.error('Error deleting order in Supabase:', err);
+      }
+    }
   };
 
   const updateDeliverySettings = (settings: Partial<DeliverySettings>) => {
@@ -683,8 +952,12 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         resetProductsToDefault,
         orders,
         addOrder,
+        approveOrder,
+        rejectOrder,
         updateOrderStatus,
         deleteOrder,
+        refreshOrders,
+        isOrdersLoading,
         deliverySettings,
         updateDeliverySettings,
         isLoading,

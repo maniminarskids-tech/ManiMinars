@@ -109,7 +109,7 @@ export const CheckoutPage: React.FC = () => {
     setScreenshotFileName('');
   };
 
-  const handleSubmitOrder = (e: React.FormEvent) => {
+  const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
     // Strict validation: Require payment proof or reference number
@@ -129,44 +129,48 @@ export const CheckoutPage: React.FC = () => {
     setPaymentError('');
     setIsProcessing(true);
 
-    setTimeout(() => {
-      const generatedId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
-      setOrderId(generatedId);
-      setSubmittedReference(trimmedRef);
-      setSubmittedScreenshot(paymentScreenshot);
+    const generatedId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
+    setOrderId(generatedId);
+    setSubmittedReference(trimmedRef);
+    setSubmittedScreenshot(paymentScreenshot);
 
-      // Save order to live system with payment reference & screenshot
-      const newOrder: Order = {
-        id: generatedId,
-        createdAt: new Date().toISOString(),
-        customer: {
-          fullName: formData.fullName,
-          phone: `+92${formData.phone.replace(/^0+/, '')}`,
-          email: formData.email,
-          city: formData.city,
-          address: formData.address,
-          notes: formData.notes,
-        },
-        items: [...cart],
-        subtotal,
-        deliveryFee,
-        discount,
-        total,
-        paymentMethod,
-        paymentReference: trimmedRef || undefined,
-        paymentProofImage: paymentScreenshot || undefined,
-        paymentStatus: 'pending',
-        shippingTier,
-        couponCode: promoCode || undefined,
-        status: 'pending',
-        courier: deliverySettings.courierName,
-      };
-      addOrder(newOrder);
+    // Save order to Supabase immediately with payment reference & screenshot
+    const newOrder: Order = {
+      id: generatedId,
+      createdAt: new Date().toISOString(),
+      customer: {
+        fullName: formData.fullName,
+        phone: `+92${formData.phone.replace(/^0+/, '')}`,
+        email: formData.email,
+        city: formData.city,
+        address: formData.address,
+        notes: formData.notes,
+      },
+      items: [...cart],
+      subtotal,
+      deliveryFee,
+      discount,
+      total,
+      paymentMethod,
+      paymentReference: trimmedRef || undefined,
+      paymentProofImage: paymentScreenshot || undefined,
+      paymentStatus: 'pending',
+      shippingTier,
+      couponCode: promoCode || undefined,
+      status: 'Pending Verification',
+      courier: deliverySettings.courierName,
+    };
 
-      setIsProcessing(false);
-      setOrderComplete(true);
-      clearCart();
-    }, 1000);
+    // Save immediately to Supabase and local cache
+    try {
+      await addOrder(newOrder);
+    } catch (err) {
+      console.error('Error saving order:', err);
+    }
+
+    setIsProcessing(false);
+    setOrderComplete(true);
+    clearCart();
   };
 
   // Order Complete Screen

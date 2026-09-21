@@ -81,7 +81,15 @@ export interface FilterState {
 
 export type SortOption = 'featured' | 'newest' | 'price-low' | 'price-high';
 
-export type OrderStatus = 'pending' | 'confirmed' | 'dispatched' | 'delivered' | 'cancelled';
+export type OrderStatus =
+  | 'Pending Verification'
+  | 'Approved'
+  | 'Rejected'
+  | 'pending'
+  | 'confirmed'
+  | 'dispatched'
+  | 'delivered'
+  | 'cancelled';
 export type PaymentMethod = 'bank_transfer' | 'raast' | 'cod' | 'card' | 'wallet';
 export type PaymentStatus = 'pending' | 'completed' | 'failed';
 

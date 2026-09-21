@@ -79,3 +79,71 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
   END IF;
 END $$;
+
+-- ==============================================================================
+-- 6. Create Orders Table
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.orders (
+    id TEXT PRIMARY KEY,
+    customer JSONB NOT NULL,
+    items JSONB NOT NULL,
+    subtotal NUMERIC NOT NULL,
+    delivery_fee NUMERIC NOT NULL DEFAULT 0,
+    discount NUMERIC NOT NULL DEFAULT 0,
+    total NUMERIC NOT NULL,
+    payment_method TEXT NOT NULL,
+    payment_reference TEXT,
+    payment_proof_image TEXT,
+    payment_status TEXT DEFAULT 'pending',
+    shipping_tier TEXT DEFAULT 'standard',
+    coupon_code TEXT,
+    status TEXT NOT NULL DEFAULT 'Pending Verification',
+    tracking_number TEXT,
+    courier TEXT,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- Indexes for high-performance order retrieval & status queries
+CREATE INDEX IF NOT EXISTS idx_orders_created_at ON public.orders(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON public.orders(status);
+
+-- Enable Row Level Security (RLS) on orders
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+
+-- RLS Policies for orders
+DROP POLICY IF EXISTS "Public can view orders" ON public.orders;
+CREATE POLICY "Public can view orders" 
+ON public.orders 
+FOR SELECT 
+USING (true);
+
+DROP POLICY IF EXISTS "Allow insert orders" ON public.orders;
+CREATE POLICY "Allow insert orders" 
+ON public.orders 
+FOR INSERT 
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow update orders" ON public.orders;
+CREATE POLICY "Allow update orders" 
+ON public.orders 
+FOR UPDATE 
+USING (true) 
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow delete orders" ON public.orders;
+CREATE POLICY "Allow delete orders" 
+ON public.orders 
+FOR DELETE 
+USING (true);
+
+-- Enable Supabase Realtime for orders table
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'orders'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+  END IF;
+END $$;

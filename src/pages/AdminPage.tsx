@@ -24,6 +24,10 @@ import {
   RotateCcw,
   Sliders,
   CheckCircle2,
+  XCircle,
+  ClipboardList,
+  CheckCheck,
+  Copy,
   Clock,
   Send,
   AlertCircle,
@@ -107,8 +111,12 @@ export const AdminPage: React.FC = () => {
     updateProductStock,
     resetProductsToDefault,
     orders,
+    approveOrder,
+    rejectOrder,
     updateOrderStatus,
     deleteOrder,
+    refreshOrders,
+    isOrdersLoading,
     deliverySettings,
     updateDeliverySettings,
     isCloudConnected,
@@ -119,12 +127,17 @@ export const AdminPage: React.FC = () => {
 
   const handleManualSync = async () => {
     setIsSyncing(true);
-    await refreshProducts();
+    await Promise.all([refreshProducts(), refreshOrders()]);
     setTimeout(() => setIsSyncing(false), 800);
   };
 
-  // Tab State: 'products' | 'inventory' | 'deliveries' | 'coupons' | 'settings'
-  const [activeTab, setActiveTab] = useState<'products' | 'inventory' | 'deliveries' | 'coupons' | 'settings'>('products');
+  // Tab State: 'products' | 'orders' | 'inventory' | 'deliveries' | 'coupons' | 'settings'
+  const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'inventory' | 'deliveries' | 'coupons' | 'settings'>('orders');
+
+  // Proof image lightbox modal state
+  const [proofModalUrl, setProofModalUrl] = useState<{ url: string; orderId: string } | null>(null);
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<{ orderId: string; message: string; type: 'approved' | 'rejected' } | null>(null);
 
   // Product management modal / form state
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -450,24 +463,66 @@ export const AdminPage: React.FC = () => {
       (p.sku && p.sku.toLowerCase().includes(inventorySearch.toLowerCase()))
   );
 
+  // Orders counts by status
+  const pendingVerificationOrders = orders.filter(
+    (o) => o.status === 'Pending Verification' || o.status === 'pending'
+  );
+  const approvedOrders = orders.filter((o) => o.status === 'Approved');
+  const rejectedOrders = orders.filter((o) => o.status === 'Rejected');
+
   // Filtered orders list
   const filteredOrders = orders.filter((o) => {
+    const q = orderSearch.toLowerCase().trim();
     const matchesSearch =
-      o.id.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.customer.fullName.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.customer.city.toLowerCase().includes(orderSearch.toLowerCase()) ||
-      o.customer.phone.includes(orderSearch);
-    const matchesStatus = orderStatusFilter === 'all' || o.status === orderStatusFilter;
+      !q ||
+      o.id.toLowerCase().includes(q) ||
+      o.customer.fullName.toLowerCase().includes(q) ||
+      o.customer.city.toLowerCase().includes(q) ||
+      o.customer.phone.includes(q) ||
+      (o.paymentReference && o.paymentReference.toLowerCase().includes(q));
+
+    let matchesStatus = true;
+    if (orderStatusFilter === 'all') {
+      matchesStatus = true;
+    } else if (orderStatusFilter === 'pending' || orderStatusFilter === 'Pending Verification') {
+      matchesStatus = o.status === 'Pending Verification' || o.status === 'pending';
+    } else if (orderStatusFilter === 'Approved' || orderStatusFilter === 'approved') {
+      matchesStatus = o.status === 'Approved';
+    } else if (orderStatusFilter === 'Rejected' || orderStatusFilter === 'rejected') {
+      matchesStatus = o.status === 'Rejected';
+    } else {
+      matchesStatus = o.status.toLowerCase() === orderStatusFilter.toLowerCase();
+    }
+
     return matchesSearch && matchesStatus;
   });
 
   // KPI calculations
   const totalRevenue = orders.reduce((sum, o) => sum + o.total, 0);
-  const pendingDeliveries = orders.filter((o) => o.status === 'pending' || o.status === 'dispatched')
-    .length;
+  const pendingDeliveries = orders.filter(
+    (o) => o.status === 'Pending Verification' || o.status === 'pending' || o.status === 'dispatched'
+  ).length;
   const lowStockCount = products.filter(
     (p) => (p.stockQuantity ?? 20) <= (p.lowStockThreshold ?? 5)
   ).length;
+
+  const handleApproveOrderAction = async (orderId: string) => {
+    await approveOrder(orderId);
+    setActionNotice({ orderId, message: `Order #${orderId} marked as Approved`, type: 'approved' });
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  const handleRejectOrderAction = async (orderId: string) => {
+    await rejectOrder(orderId);
+    setActionNotice({ orderId, message: `Order #${orderId} marked as Rejected`, type: 'rejected' });
+    setTimeout(() => setActionNotice(null), 4000);
+  };
+
+  const handleCopyOrderId = (id: string) => {
+    navigator.clipboard?.writeText(id);
+    setCopiedOrderId(id);
+    setTimeout(() => setCopiedOrderId(null), 2000);
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F6F5F2] text-neutral-900">
@@ -565,36 +620,57 @@ export const AdminPage: React.FC = () => {
               <ShoppingBag className="w-4 h-4 text-[#F5BE38]" />
             </div>
             <div className="text-2xl font-bold text-neutral-900">{orders.length}</div>
-            <span className="text-[11px] text-neutral-500">Recorded across Pakistan</span>
+            <span className="text-[11px] text-neutral-500">Saved in Supabase Cloud</span>
           </div>
 
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-2xs">
+          <div className={`p-4 sm:p-5 rounded-2xl border shadow-2xs transition-all ${
+            pendingVerificationOrders.length > 0
+              ? 'bg-amber-50/70 border-amber-200'
+              : 'bg-white border-neutral-200/80'
+          }`}>
             <div className="flex items-center justify-between text-neutral-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Active Deliveries</span>
-              <Truck className="w-4 h-4 text-blue-600" />
+              <span className="text-xs font-bold uppercase tracking-wider text-amber-900 font-semibold">Pending Verification</span>
+              <Clock className="w-4 h-4 text-amber-600" />
             </div>
-            <div className="text-2xl font-bold text-neutral-900">{pendingDeliveries}</div>
-            <span className="text-[11px] text-blue-600 font-semibold">Pending / In Transit</span>
+            <div className="text-2xl font-bold text-amber-950">{pendingVerificationOrders.length}</div>
+            <span className="text-[11px] text-amber-700 font-medium">Awaiting Admin Approval</span>
           </div>
 
           <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-2xs">
             <div className="flex items-center justify-between text-neutral-400 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider">Order Value</span>
-              <DollarSign className="w-4 h-4 text-green-600" />
+              <span className="text-xs font-bold uppercase tracking-wider">Total Volume</span>
+              <DollarSign className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-2xl font-bold text-neutral-900">
               PKR {totalRevenue.toLocaleString()}
             </div>
-            <span className="text-[11px] text-green-600 font-semibold">COD & Card volume</span>
+            <span className="text-[11px] text-emerald-600 font-semibold">Bank & Raast volume</span>
           </div>
         </div>
 
         {/* Tab Selector */}
         <div className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 rounded-2xl shadow-2xs">
-          <div className="flex space-x-2">
+          <div className="flex space-x-2 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`py-3.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 shrink-0 ${
+                activeTab === 'orders' || activeTab === 'deliveries'
+                  ? 'border-[#E84D3D] text-[#E84D3D]'
+                  : 'border-transparent text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              <ClipboardList className="w-4 h-4" />
+              <span>Orders Management ({orders.length})</span>
+              {pendingVerificationOrders.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
+                  {pendingVerificationOrders.length} New
+                </span>
+              )}
+            </button>
+
             <button
               onClick={() => setActiveTab('products')}
-              className={`py-3.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+              className={`py-3.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 shrink-0 ${
                 activeTab === 'products'
                   ? 'border-[#E84D3D] text-[#E84D3D]'
                   : 'border-transparent text-neutral-500 hover:text-neutral-900'
@@ -605,20 +681,8 @@ export const AdminPage: React.FC = () => {
             </button>
 
             <button
-              onClick={() => setActiveTab('deliveries')}
-              className={`py-3.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
-                activeTab === 'deliveries'
-                  ? 'border-[#E84D3D] text-[#E84D3D]'
-                  : 'border-transparent text-neutral-500 hover:text-neutral-900'
-              }`}
-            >
-              <Truck className="w-4 h-4" />
-              <span>Deliveries & Orders ({orders.length})</span>
-            </button>
-
-            <button
               onClick={() => setActiveTab('settings')}
-              className={`py-3.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 ${
+              className={`py-3.5 px-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all flex items-center gap-2 shrink-0 ${
                 activeTab === 'settings'
                   ? 'border-[#E84D3D] text-[#E84D3D]'
                   : 'border-transparent text-neutral-500 hover:text-neutral-900'
@@ -629,15 +693,33 @@ export const AdminPage: React.FC = () => {
             </button>
           </div>
 
-          {activeTab === 'products' && (
-            <button
-              onClick={handleOpenAddModal}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#E84D3D] hover:bg-[#DF3E2E] text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add New Product</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {(activeTab === 'orders' || activeTab === 'deliveries') && (
+              <button
+                onClick={async () => {
+                  setIsSyncing(true);
+                  await refreshOrders();
+                  setTimeout(() => setIsSyncing(false), 600);
+                }}
+                disabled={isSyncing || isOrdersLoading}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-200 text-neutral-700 hover:bg-neutral-50 text-xs font-bold transition-colors disabled:opacity-50"
+                title="Sync orders from Supabase"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing || isOrdersLoading ? 'animate-spin text-[#E84D3D]' : ''}`} />
+                <span className="hidden sm:inline">Refresh Orders</span>
+              </button>
+            )}
+
+            {activeTab === 'products' && (
+              <button
+                onClick={handleOpenAddModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#E84D3D] hover:bg-[#DF3E2E] text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add New Product</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ========================================================================= */}
@@ -812,37 +894,147 @@ export const AdminPage: React.FC = () => {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 2: DELIVERIES & ORDERS MANAGEMENT ("devely etc")                     */}
+        {/* TAB 2: ORDERS MANAGEMENT ("Orders Management")                            */}
         {/* ========================================================================= */}
-        {activeTab === 'deliveries' && (
+        {(activeTab === 'orders' || activeTab === 'deliveries') && (
           <div className="space-y-4">
+            {/* Action Notice Alert Banner */}
+            {actionNotice && (
+              <div
+                className={`p-4 rounded-2xl border flex items-center justify-between text-xs font-semibold animate-in fade-in duration-200 ${
+                  actionNotice.type === 'approved'
+                    ? 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                    : 'bg-red-50 text-red-900 border-red-200'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {actionNotice.type === 'approved' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <XCircle className="w-4 h-4 text-red-600 shrink-0" />
+                  )}
+                  <span>{actionNotice.message}</span>
+                </div>
+                <button
+                  onClick={() => setActionNotice(null)}
+                  className="text-neutral-400 hover:text-neutral-700 p-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Filter and search bar */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-neutral-200/80 shadow-2xs">
-              <div className="relative w-full sm:w-80">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-                <input
-                  type="text"
-                  placeholder="Search by order ID, customer name, phone, city..."
-                  value={orderSearch}
-                  onChange={(e) => setOrderSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-xl border border-neutral-200 text-xs outline-none focus:ring-2 focus:ring-[#E84D3D]"
-                />
+            <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-2xs space-y-3">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="relative w-full sm:w-96">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by order ID, customer name, phone, city, TID..."
+                    value={orderSearch}
+                    onChange={(e) => setOrderSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-xl border border-neutral-200 text-xs outline-none focus:ring-2 focus:ring-[#E84D3D]"
+                  />
+                  {orderSearch && (
+                    <button
+                      onClick={() => setOrderSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 text-xs"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <span className="text-xs font-semibold text-neutral-500">Filter:</span>
+                  <select
+                    value={orderStatusFilter}
+                    onChange={(e) => setOrderStatusFilter(e.target.value)}
+                    className="text-xs px-3 py-2 rounded-xl border border-neutral-200 bg-white font-medium outline-none focus:ring-2 focus:ring-[#E84D3D] cursor-pointer"
+                  >
+                    <option value="all">All Orders ({orders.length})</option>
+                    <option value="pending">Pending Verification ({pendingVerificationOrders.length})</option>
+                    <option value="Approved">Approved ({approvedOrders.length})</option>
+                    <option value="Rejected">Rejected ({rejectedOrders.length})</option>
+                    <option value="dispatched">Dispatched / In Transit</option>
+                    <option value="delivered">Delivered</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <span className="text-xs font-semibold text-neutral-500">Status:</span>
-                <select
-                  value={orderStatusFilter}
-                  onChange={(e) => setOrderStatusFilter(e.target.value)}
-                  className="text-xs px-3 py-2 rounded-xl border border-neutral-200 bg-white outline-none focus:ring-2 focus:ring-[#E84D3D] cursor-pointer"
+              {/* Quick Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-neutral-100 text-xs">
+                <button
+                  onClick={() => setOrderStatusFilter('all')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors shrink-0 ${
+                    orderStatusFilter === 'all'
+                      ? 'bg-neutral-900 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  }`}
                 >
-                  <option value="all">All Deliveries</option>
-                  <option value="pending">Pending Dispatch</option>
-                  <option value="confirmed">Confirmed</option>
-                  <option value="dispatched">Dispatched / In Transit</option>
-                  <option value="delivered">Delivered</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
+                  All ({orders.length})
+                </button>
+                <button
+                  onClick={() => setOrderStatusFilter('pending')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                    orderStatusFilter === 'pending' || orderStatusFilter === 'Pending Verification'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                  }`}
+                >
+                  <span>Pending Verification</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-200/80 text-amber-900 font-bold">
+                    {pendingVerificationOrders.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setOrderStatusFilter('Approved')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                    orderStatusFilter === 'Approved' || orderStatusFilter === 'approved'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                  }`}
+                >
+                  <span>Approved</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-200/80 text-emerald-900 font-bold">
+                    {approvedOrders.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setOrderStatusFilter('Rejected')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                    orderStatusFilter === 'Rejected' || orderStatusFilter === 'rejected'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-red-50 text-red-800 hover:bg-red-100'
+                  }`}
+                >
+                  <span>Rejected</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-red-200/80 text-red-900 font-bold">
+                    {rejectedOrders.length}
+                  </span>
+                </button>
+                <button
+                  onClick={() => setOrderStatusFilter('dispatched')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors shrink-0 ${
+                    orderStatusFilter === 'dispatched'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-blue-50 text-blue-800 hover:bg-blue-100'
+                  }`}
+                >
+                  Dispatched
+                </button>
+                <button
+                  onClick={() => setOrderStatusFilter('delivered')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors shrink-0 ${
+                    orderStatusFilter === 'delivered'
+                      ? 'bg-green-700 text-white'
+                      : 'bg-green-50 text-green-800 hover:bg-green-100'
+                  }`}
+                >
+                  Delivered
+                </button>
               </div>
             </div>
 
@@ -850,9 +1042,9 @@ export const AdminPage: React.FC = () => {
             <div className="space-y-4">
               {filteredOrders.length === 0 ? (
                 <div className="bg-white p-12 rounded-2xl border border-neutral-200/80 text-center">
-                  <Truck className="w-10 h-10 text-neutral-300 mx-auto mb-2" />
-                  <p className="text-sm font-bold text-neutral-800">No matching deliveries found</p>
-                  <p className="text-xs text-neutral-400">Try adjusting your search criteria</p>
+                  <ClipboardList className="w-10 h-10 text-neutral-300 mx-auto mb-2" />
+                  <p className="text-sm font-bold text-neutral-800">No matching orders found</p>
+                  <p className="text-xs text-neutral-400">Try adjusting your status filter or search keywords</p>
                 </div>
               ) : (
                 filteredOrders.map((order) => {
@@ -867,26 +1059,49 @@ export const AdminPage: React.FC = () => {
                   const waCustomerMsg = `Salam ${order.customer.fullName}! 👋 
 This is Mani Minars Customer Logistics regarding your order #${order.id}.
 Status: ${order.status.toUpperCase()}
-Tracking Number: ${order.trackingNumber || 'Pending Courier Scan'}
-Courier: ${order.courier || 'Trax Logistics'}
-Total Payable: PKR ${order.total.toLocaleString()} (${waPaymentMethod})
-${order.paymentReference ? `Payment Ref: ${order.paymentReference}\n` : ''}Delivery Address: ${order.customer.address}, ${order.customer.city}`;
+Total Amount: PKR ${order.total.toLocaleString()} (${waPaymentMethod})
+${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''}Delivery Address: ${order.customer.address}, ${order.customer.city}`;
 
                   const cleanCustomerPhone = order.customer.phone.replace(/[^0-9]/g, '');
+                  const isPending = order.status === 'Pending Verification' || order.status === 'pending';
+                  const isApproved = order.status === 'Approved';
+                  const isRejected = order.status === 'Rejected';
 
                   return (
                     <div
                       key={order.id}
-                      className="bg-white rounded-2xl border border-neutral-200/80 shadow-2xs p-5 sm:p-6 space-y-4 transition-all hover:shadow-xs"
+                      className={`bg-white rounded-2xl border shadow-2xs p-5 sm:p-6 space-y-4 transition-all hover:shadow-xs ${
+                        isPending
+                          ? 'border-amber-300/80 ring-1 ring-amber-100'
+                          : isApproved
+                          ? 'border-emerald-200'
+                          : isRejected
+                          ? 'border-red-200'
+                          : 'border-neutral-200/80'
+                      }`}
                     >
                       {/* Header */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-neutral-100">
-                        <div className="flex items-center gap-2.5">
-                          <span className="font-bold text-base text-neutral-900">{order.id}</span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-base text-neutral-900 tracking-tight">{order.id}</span>
+                            <button
+                              onClick={() => handleCopyOrderId(order.id)}
+                              className="p-1 text-neutral-400 hover:text-neutral-700 rounded transition-colors"
+                              title="Copy Order ID"
+                            >
+                              {copiedOrderId === order.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
                           <span className="text-[11px] text-neutral-400">
                             {new Date(order.createdAt).toLocaleDateString('en-PK', {
                               month: 'short',
                               day: 'numeric',
+                              year: 'numeric',
                               hour: '2-digit',
                               minute: '2-digit',
                             })}
@@ -896,21 +1111,25 @@ ${order.paymentReference ? `Payment Ref: ${order.paymentReference}\n` : ''}Deliv
                         <div className="flex items-center gap-2">
                           {/* Current Status Pill */}
                           <span
-                            className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                              order.status === 'delivered'
-                                ? 'bg-green-100 text-green-800'
+                            className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border ${
+                              isApproved
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                                : isRejected
+                                ? 'bg-red-100 text-red-900 border-red-300'
+                                : order.status === 'delivered'
+                                ? 'bg-green-100 text-green-900 border-green-300'
                                 : order.status === 'dispatched'
-                                ? 'bg-blue-100 text-blue-800'
+                                ? 'bg-blue-100 text-blue-900 border-blue-300'
                                 : order.status === 'confirmed'
-                                ? 'bg-purple-100 text-purple-800'
-                                : order.status === 'cancelled'
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-orange-100 text-orange-800'
+                                ? 'bg-purple-100 text-purple-900 border-purple-300'
+                                : 'bg-amber-100 text-amber-900 border-amber-300 animate-pulse'
                             }`}
                           >
+                            {isApproved && <CheckCircle2 className="w-3.5 h-3.5" />}
+                            {isRejected && <XCircle className="w-3.5 h-3.5" />}
+                            {isPending && <Clock className="w-3.5 h-3.5" />}
                             {order.status === 'delivered' && <CheckCircle2 className="w-3.5 h-3.5" />}
                             {order.status === 'dispatched' && <Truck className="w-3.5 h-3.5" />}
-                            {order.status === 'pending' && <Clock className="w-3.5 h-3.5" />}
                             <span>{order.status}</span>
                           </span>
 
@@ -928,149 +1147,265 @@ ${order.paymentReference ? `Payment Ref: ${order.paymentReference}\n` : ''}Deliv
                         </div>
                       </div>
 
-                      {/* Content: Customer details + Items */}
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                        {/* Customer & Destination info (5 cols) */}
-                        <div className="md:col-span-5 space-y-1.5 text-xs">
-                          <h4 className="font-bold text-neutral-900 text-sm">
-                            {order.customer.fullName}
-                          </h4>
-                          <div className="flex items-center gap-2">
-                            <span className="text-neutral-500">{order.customer.phone}</span>
-                            {/* WhatsApp button to message customer directly! */}
+                      {/* Content: Customer details + Items + Payment Proof + Admin Actions */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+                        {/* 1. Customer & Phone info (3 cols) */}
+                        <div className="md:col-span-3 space-y-2 text-xs">
+                          <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
+                            Customer Details
+                          </span>
+                          <div>
+                            <h4 className="font-bold text-neutral-900 text-sm">
+                              {order.customer.fullName}
+                            </h4>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className="font-mono text-neutral-700">{order.customer.phone}</span>
+                            </div>
+                            <p className="text-neutral-500 text-[11px] mt-0.5">{order.customer.email}</p>
+                          </div>
+
+                          <div className="pt-1">
+                            {/* Direct WhatsApp button */}
                             <a
                               href={`https://wa.me/${cleanCustomerPhone}?text=${encodeURIComponent(
                                 waCustomerMsg
                               )}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 hover:text-green-700 bg-green-50 hover:bg-green-100 px-2 py-0.5 rounded-full transition-colors"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-2.5 py-1 rounded-xl transition-colors w-full justify-center"
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
                               <span>WhatsApp Customer</span>
                             </a>
                           </div>
-                          <p className="text-neutral-500">{order.customer.email}</p>
-                          <p className="text-neutral-700 font-medium pt-1">
-                            📍 {order.customer.address}, <strong className="text-neutral-900">{order.customer.city}</strong>
-                          </p>
-                          {order.customer.notes && (
-                            <p className="text-neutral-500 bg-neutral-50 p-2 rounded-lg border border-neutral-100 text-[11px]">
-                              Note: {order.customer.notes}
+
+                          <div className="pt-1 text-neutral-700">
+                            <p className="font-medium text-[11px]">
+                              📍 {order.customer.address}, <strong className="text-neutral-900">{order.customer.city}</strong>
                             </p>
-                          )}
-
-                          {/* Payment details & verification proof */}
-                          <div className="pt-2 mt-2 border-t border-neutral-100 space-y-1.5 bg-neutral-50/70 p-2.5 rounded-xl border border-neutral-100">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="text-neutral-500 font-medium">Payment Mode:</span>
-                              <span className="font-semibold text-neutral-800">
-                                {order.paymentMethod === 'bank_transfer'
-                                  ? 'Meezan Bank'
-                                  : order.paymentMethod === 'raast'
-                                  ? 'Raast (03046466815)'
-                                  : order.paymentMethod.toUpperCase()}
-                              </span>
-                            </div>
-
-                            {order.paymentReference && (
-                              <div className="flex items-center justify-between text-[11px]">
-                                <span className="text-neutral-500 font-medium">TID / Ref:</span>
-                                <span className="font-mono font-bold text-neutral-900 bg-white px-2 py-0.5 rounded border border-neutral-200">
-                                  {order.paymentReference}
-                                </span>
-                              </div>
-                            )}
-
-                            {order.paymentProofImage && (
-                              <div className="flex items-center justify-between pt-1 border-t border-neutral-200/60">
-                                <span className="text-neutral-500 font-medium text-[11px]">Screenshot:</span>
-                                <a
-                                  href={order.paymentProofImage}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
-                                >
-                                  <img
-                                    src={order.paymentProofImage}
-                                    alt="Payment proof"
-                                    className="w-7 h-7 object-cover rounded border border-neutral-300"
-                                  />
-                                  <span>View Proof</span>
-                                </a>
-                              </div>
+                            {order.customer.notes && (
+                              <p className="mt-1 text-neutral-600 bg-neutral-50 p-2 rounded-lg border border-neutral-200 text-[11px]">
+                                <span className="font-semibold">Note:</span> {order.customer.notes}
+                              </p>
                             )}
                           </div>
                         </div>
 
-                        {/* Items ordered (4 cols) */}
-                        <div className="md:col-span-4 text-xs space-y-2 border-t md:border-t-0 md:border-l border-neutral-100 md:pl-4">
-                          <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400">
-                            Bag Contents ({order.items.length})
+                        {/* 2. Products ordered (3 cols) */}
+                        <div className="md:col-span-3 text-xs space-y-2 border-t md:border-t-0 md:border-l border-neutral-100 md:pl-4">
+                          <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
+                            Products Ordered ({order.items.length})
                           </span>
-                          <div className="space-y-1.5">
+                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                             {order.items.map((item, idx) => (
-                              <div key={idx} className="flex justify-between items-center text-[11px]">
-                                <span className="font-medium text-neutral-800 line-clamp-1 max-w-[180px]">
-                                  {item.quantity}x {item.product.name} ({item.selectedSize})
-                                </span>
-                                <span className="font-semibold text-neutral-900">
+                              <div key={idx} className="flex justify-between items-start text-[11px] gap-2">
+                                <div className="space-y-0.5">
+                                  <span className="font-semibold text-neutral-800 line-clamp-1">
+                                    {item.quantity}x {item.product.name}
+                                  </span>
+                                  <span className="text-[10px] text-neutral-500 block">
+                                    Size: {item.selectedSize} {item.selectedColor ? `• ${item.selectedColor.name}` : ''}
+                                  </span>
+                                </div>
+                                <span className="font-semibold text-neutral-900 shrink-0">
                                   PKR {(item.price * item.quantity).toLocaleString()}
                                 </span>
                               </div>
                             ))}
                           </div>
-                          <div className="pt-2 border-t border-neutral-100 flex justify-between font-bold text-xs text-neutral-900">
-                            <span>Total Payable ({order.paymentMethod.toUpperCase()}):</span>
-                            <span>PKR {order.total.toLocaleString()}</span>
+
+                          <div className="pt-2 border-t border-neutral-100 space-y-1 text-[11px]">
+                            <div className="flex justify-between text-neutral-500">
+                              <span>Subtotal:</span>
+                              <span>PKR {order.subtotal.toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between text-neutral-500">
+                              <span>Delivery:</span>
+                              <span>PKR {order.deliveryFee.toLocaleString()}</span>
+                            </div>
+                            {order.discount > 0 && (
+                              <div className="flex justify-between text-red-600 font-medium">
+                                <span>Discount:</span>
+                                <span>-PKR {order.discount.toLocaleString()}</span>
+                              </div>
+                            )}
+                            <div className="pt-1.5 border-t border-neutral-200 flex justify-between font-bold text-xs text-neutral-900">
+                              <span>Total Amount:</span>
+                              <span className="text-sm font-extrabold text-[#E84D3D]">
+                                PKR {order.total.toLocaleString()}
+                              </span>
+                            </div>
                           </div>
                         </div>
 
-                        {/* Delivery fulfillment actions (3 cols) */}
-                        <div className="md:col-span-3 text-xs space-y-2.5 border-t md:border-t-0 md:border-l border-neutral-100 md:pl-4">
+                        {/* 3. Payment details & Proof (3 cols) */}
+                        <div className="md:col-span-3 text-xs space-y-2 border-t md:border-t-0 md:border-l border-neutral-100 md:pl-4">
                           <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
-                            Update Delivery Status
+                            Payment Details & Proof
                           </span>
 
-                          <div>
-                            <select
-                              value={order.status}
-                              onChange={(e) =>
-                                updateOrderStatus(order.id, e.target.value as OrderStatus)
-                              }
-                              className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-neutral-200 bg-white font-semibold cursor-pointer outline-none focus:ring-2 focus:ring-[#E84D3D]"
+                          <div className="space-y-2 bg-neutral-50/80 p-3 rounded-xl border border-neutral-200/70">
+                            <div>
+                              <span className="text-[10px] text-neutral-500 font-semibold uppercase tracking-wider block">
+                                Payment Method
+                              </span>
+                              <span className="font-bold text-neutral-900 text-xs">
+                                {order.paymentMethod === 'bank_transfer'
+                                  ? 'Meezan Bank Transfer'
+                                  : order.paymentMethod === 'raast'
+                                  ? 'Raast Payment (03046466815)'
+                                  : order.paymentMethod.toUpperCase()}
+                              </span>
+                            </div>
+
+                            {/* Reference TID */}
+                            <div>
+                              <span className="text-[10px] text-neutral-500 font-semibold uppercase tracking-wider block">
+                                Reference Number / TID
+                              </span>
+                              {order.paymentReference ? (
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <span className="font-mono font-bold text-neutral-900 bg-white px-2 py-1 rounded border border-neutral-300 text-xs">
+                                    {order.paymentReference}
+                                  </span>
+                                  <button
+                                    onClick={() => handleCopyOrderId(order.paymentReference!)}
+                                    className="p-1 text-neutral-400 hover:text-neutral-700"
+                                    title="Copy Reference"
+                                  >
+                                    <Copy className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-neutral-400 italic text-[11px]">No reference entered</span>
+                              )}
+                            </div>
+
+                            {/* Screenshot proof */}
+                            <div className="pt-2 border-t border-neutral-200">
+                              <span className="text-[10px] text-neutral-500 font-semibold uppercase tracking-wider block mb-1">
+                                Payment Proof Screenshot
+                              </span>
+                              {order.paymentProofImage ? (
+                                <div className="space-y-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setProofModalUrl({ url: order.paymentProofImage!, orderId: order.id })
+                                    }
+                                    className="group relative w-full h-24 bg-neutral-900 rounded-lg overflow-hidden border border-neutral-300 flex items-center justify-center cursor-pointer"
+                                  >
+                                    <img
+                                      src={order.paymentProofImage}
+                                      alt="Payment proof screenshot"
+                                      className="w-full h-full object-cover group-hover:opacity-75 transition-opacity"
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs font-semibold gap-1 transition-opacity">
+                                      <Search className="w-3.5 h-3.5" />
+                                      <span>Click to Inspect</span>
+                                    </div>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setProofModalUrl({ url: order.paymentProofImage!, orderId: order.id })
+                                    }
+                                    className="w-full py-1 rounded-lg border border-neutral-300 bg-white hover:bg-neutral-50 text-[11px] font-semibold text-neutral-800 flex items-center justify-center gap-1 transition-colors"
+                                  >
+                                    <span>View Proof Full Size</span>
+                                    <ExternalLink className="w-3 h-3 text-neutral-500" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="p-2.5 rounded-lg bg-neutral-100 text-neutral-500 text-[11px] text-center">
+                                  No screenshot uploaded (TID reference provided)
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 4. Admin Actions (3 cols): Approve & Reject */}
+                        <div className="md:col-span-3 text-xs space-y-3 border-t md:border-t-0 md:border-l border-neutral-100 md:pl-4">
+                          <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
+                            Admin Verification Actions
+                          </span>
+
+                          {/* Primary Decision Actions: Approve & Reject Buttons */}
+                          <div className="space-y-2">
+                            <button
+                              type="button"
+                              onClick={() => handleApproveOrderAction(order.id)}
+                              className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-xs ${
+                                isApproved
+                                  ? 'bg-emerald-700 text-white cursor-default'
+                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white active:scale-98'
+                              }`}
                             >
-                              <option value="pending">Pending Dispatch</option>
-                              <option value="confirmed">Confirmed</option>
-                              <option value="dispatched">Dispatched / In Transit</option>
-                              <option value="delivered">Delivered</option>
-                              <option value="cancelled">Cancelled</option>
-                            </select>
+                              <CheckCircle2 className="w-4 h-4" />
+                              <span>{isApproved ? '✓ Order Approved' : 'Approve Order'}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleRejectOrderAction(order.id)}
+                              className={`w-full py-2 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border ${
+                                isRejected
+                                  ? 'bg-red-50 text-red-700 border-red-300 cursor-default'
+                                  : 'bg-white border-red-300 text-red-600 hover:bg-red-50 active:scale-98'
+                              }`}
+                            >
+                              <XCircle className="w-4 h-4" />
+                              <span>{isRejected ? '✕ Order Rejected' : 'Reject Order'}</span>
+                            </button>
                           </div>
 
-                          {/* Courier tracking */}
-                          <div>
-                            <input
-                              type="text"
-                              placeholder="Tracking # (e.g. TRX-90412)"
-                              value={order.trackingNumber || ''}
-                              onChange={(e) =>
-                                updateOrderStatus(order.id, order.status, e.target.value, order.courier)
-                              }
-                              className="w-full text-[11px] px-2.5 py-1.5 rounded-lg border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D]"
-                            />
-                          </div>
+                          {/* Secondary Status Selector & Logistics */}
+                          <div className="pt-2 border-t border-neutral-100 space-y-2">
+                            <div>
+                              <label className="block text-[10px] font-semibold text-neutral-500 mb-1 uppercase tracking-wider">
+                                Order Status
+                              </label>
+                              <select
+                                value={order.status}
+                                onChange={(e) =>
+                                  updateOrderStatus(order.id, e.target.value as OrderStatus)
+                                }
+                                className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-neutral-200 bg-white font-semibold cursor-pointer outline-none focus:ring-2 focus:ring-[#E84D3D]"
+                              >
+                                <option value="Pending Verification">Pending Verification</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Rejected">Rejected</option>
+                                <option value="dispatched">Dispatched / In Transit</option>
+                                <option value="delivered">Delivered</option>
+                                <option value="cancelled">Cancelled</option>
+                              </select>
+                            </div>
 
-                          <div>
-                            <input
-                              type="text"
-                              placeholder="Courier (Trax / TCS)"
-                              value={order.courier || ''}
-                              onChange={(e) =>
-                                updateOrderStatus(order.id, order.status, order.trackingNumber, e.target.value)
-                              }
-                              className="w-full text-[11px] px-2.5 py-1.5 rounded-lg border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D]"
-                            />
+                            <div>
+                              <input
+                                type="text"
+                                placeholder="Tracking # (e.g. TRX-90412)"
+                                value={order.trackingNumber || ''}
+                                onChange={(e) =>
+                                  updateOrderStatus(order.id, order.status, e.target.value, order.courier)
+                                }
+                                className="w-full text-[11px] px-2.5 py-1.5 rounded-lg border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D]"
+                              />
+                            </div>
+
+                            <div>
+                              <input
+                                type="text"
+                                placeholder="Courier (Trax / TCS / Leopard)"
+                                value={order.courier || ''}
+                                onChange={(e) =>
+                                  updateOrderStatus(order.id, order.status, order.trackingNumber, e.target.value)
+                                }
+                                className="w-full text-[11px] px-2.5 py-1.5 rounded-lg border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D]"
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1853,6 +2188,78 @@ ${order.paymentReference ? `Payment Ref: ${order.paymentReference}\n` : ''}Deliv
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Proof Lightbox Modal */}
+      {proofModalUrl && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="relative max-w-3xl w-full max-h-[90vh] flex flex-col bg-neutral-900 rounded-2xl overflow-hidden border border-neutral-800 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-3.5 bg-neutral-900/90 border-b border-neutral-800 text-white">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-sm">Payment Proof Screenshot</span>
+                <span className="text-xs text-neutral-400 font-mono">Order #{proofModalUrl.orderId}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={proofModalUrl.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-neutral-300 hover:text-white px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 transition-colors"
+                >
+                  <span>Open Full Size</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setProofModalUrl(null)}
+                  className="p-1.5 text-neutral-400 hover:text-white hover:bg-neutral-800 rounded-lg transition-colors"
+                  title="Close (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/40">
+              <img
+                src={proofModalUrl.url}
+                alt={`Proof for order ${proofModalUrl.orderId}`}
+                className="max-w-full max-h-[75vh] object-contain rounded-lg border border-neutral-800 shadow-lg"
+              />
+            </div>
+
+            {/* Modal Footer with quick decision buttons */}
+            <div className="px-5 py-3 bg-neutral-900 border-t border-neutral-800 flex items-center justify-between">
+              <span className="text-xs text-neutral-400">
+                Inspect transfer details (Account title, amount, and timestamp)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleRejectOrderAction(proofModalUrl.orderId);
+                    setProofModalUrl(null);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-red-800/80 bg-red-950/40 text-red-300 hover:bg-red-900/50 text-xs font-bold transition-colors"
+                >
+                  Reject Order
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await handleApproveOrderAction(proofModalUrl.orderId);
+                    setProofModalUrl(null);
+                  }}
+                  className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-colors shadow-xs"
+                >
+                  Approve Order
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
