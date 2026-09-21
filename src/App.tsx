@@ -19,6 +19,7 @@ const CartPage = lazy(() => import('./pages/CartPage'));
 const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
+const MyOrdersPage = lazy(() => import('./pages/MyOrdersPage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 
 // Fallback spinner for lazy routes
@@ -64,6 +65,9 @@ export default function App() {
               <Route path="/checkout" element={<CheckoutPage />} />
               <Route path="/about" element={<AboutPage />} />
               <Route path="/contact" element={<ContactPage />} />
+              <Route path="/my-orders" element={<MyOrdersPage />} />
+              <Route path="/orders" element={<MyOrdersPage />} />
+              <Route path="/track-order" element={<MyOrdersPage />} />
 
               {/* Protected Admin Management Portal */}
               <Route

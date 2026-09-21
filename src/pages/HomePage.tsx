@@ -27,7 +27,7 @@ export const HomePage: React.FC = () => {
         </div>
 
         {/* Quick Nav & Bag Button */}
-        <div className="flex items-center gap-2 sm:gap-4 pointer-events-auto">
+        <div className="flex items-center gap-2 sm:gap-3 pointer-events-auto">
           <Link
             to="/new-arrivals"
             className="hidden sm:inline-flex text-xs font-semibold text-white/90 hover:text-white px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all border border-white/20"
@@ -35,10 +35,11 @@ export const HomePage: React.FC = () => {
             New Arrivals
           </Link>
           <Link
-            to="/sale"
-            className="hidden sm:inline-flex text-xs font-bold text-white px-3 py-1.5 rounded-full bg-white/25 hover:bg-white/35 backdrop-blur-md transition-all border border-white/30"
+            to="/about"
+            id="homepage-top-about-btn"
+            className="hidden sm:inline-flex text-xs font-semibold text-white/90 hover:text-white px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md transition-all border border-white/20"
           >
-            Sale
+            About
           </Link>
 
           {/* Bag button */}
@@ -242,13 +243,14 @@ export const HomePage: React.FC = () => {
         </span>
       </div>
 
-      {/* LOWER-RIGHT CORNER: Brand Tag */}
-      <div className="absolute bottom-5 right-5 z-30 flex items-center gap-3 text-xs font-semibold text-[#1E1E1E]/80">
+      {/* LOWER-RIGHT CORNER: Sale & Help Tags (positioned safely to the left of the floating Contact Us button) */}
+      <div className="absolute bottom-5 right-36 sm:right-40 z-30 flex items-center gap-2.5 text-xs font-semibold text-[#1E1E1E]/80">
         <Link
-          to="/about"
-          className="px-3 py-1.5 rounded-full bg-white/30 hover:bg-white/50 backdrop-blur-md text-[#1E1E1E] transition-all border border-black/10"
+          to="/sale"
+          id="homepage-bottom-sale-btn"
+          className="px-3.5 py-1.5 rounded-full bg-[#E84D3D] text-white hover:bg-[#d63b2c] backdrop-blur-md transition-all border border-white/30 shadow-xs font-bold"
         >
-          About Brand
+          Sale
         </Link>
         <Link
           to="/contact"

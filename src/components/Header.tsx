@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Search, ShoppingBag, User, Menu, X, ArrowRight, Sparkles } from 'lucide-react';
+import { Search, ShoppingBag, User, Menu, X, ArrowRight, Sparkles, Package } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import SearchModal from './SearchModal';
 import AccountModal from './AccountModal';
@@ -34,8 +34,9 @@ export const Header: React.FC<HeaderProps> = () => {
     { name: 'Shop Kids', path: '/kids', age: '0–10Y', accent: '#E84D3D' },
     { name: 'Shop Juniors', path: '/juniors', age: '11–16Y', accent: '#F5BE38' },
     { name: 'New Arrivals', path: '/new-arrivals' },
-    { name: 'Sale', path: '/sale', isSale: true },
     { name: 'About', path: '/about' },
+    { name: 'My Orders', path: '/my-orders' },
+    { name: 'Sale', path: '/sale', isSale: true },
   ];
 
   return (
@@ -123,6 +124,17 @@ export const Header: React.FC<HeaderProps> = () => {
 
           {/* Right Action Icons */}
           <div className="flex items-center space-x-1 sm:space-x-2">
+            {/* Quick Track Order Link */}
+            <Link
+              to="/my-orders"
+              id="header-track-order-link"
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-neutral-100 hover:bg-neutral-200 text-neutral-800 transition-colors"
+              title="Track Your Order"
+            >
+              <Package className="w-3.5 h-3.5 text-[#E84D3D]" />
+              <span>Track Order</span>
+            </Link>
+
             {/* Search Button */}
             <button
               id="header-search-btn"
@@ -202,18 +214,28 @@ export const Header: React.FC<HeaderProps> = () => {
                 <ArrowRight className="w-4 h-4 text-neutral-400" />
               </Link>
               <Link
-                to="/sale"
-                className="flex items-center justify-between p-3 rounded-xl hover:bg-red-50 text-[#E84D3D] font-semibold"
-              >
-                <span>Sale & Special Offers</span>
-                <span className="text-xs bg-[#E84D3D] text-white px-2 py-0.5 rounded">Up to 40%</span>
-              </Link>
-              <Link
                 to="/about"
                 className="flex items-center justify-between p-3 rounded-xl hover:bg-neutral-50 text-neutral-800 font-medium"
               >
                 <span>About Mani Minars</span>
                 <ArrowRight className="w-4 h-4 text-neutral-400" />
+              </Link>
+              <Link
+                to="/my-orders"
+                className="flex items-center justify-between p-3 rounded-xl bg-orange-50/70 hover:bg-orange-50 text-neutral-900 font-bold border border-orange-200/70"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Package className="w-4 h-4 text-[#E84D3D]" />
+                  <span>My Orders & Live Tracking</span>
+                </div>
+                <ArrowRight className="w-4 h-4 text-[#E84D3D]" />
+              </Link>
+              <Link
+                to="/sale"
+                className="flex items-center justify-between p-3 rounded-xl hover:bg-red-50 text-[#E84D3D] font-semibold"
+              >
+                <span>Sale & Special Offers</span>
+                <span className="text-xs bg-[#E84D3D] text-white px-2 py-0.5 rounded">Up to 40%</span>
               </Link>
               <Link
                 to="/contact"

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { X, User, Package, Heart, CheckCircle2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, User, Package, Heart, CheckCircle2, ArrowRight } from 'lucide-react';
 
 interface AccountModalProps {
   isOpen: boolean;
@@ -7,6 +8,7 @@ interface AccountModalProps {
 }
 
 export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'login' | 'track'>('login');
   const [phone, setPhone] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
@@ -25,7 +27,13 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
 
   const handleTrackSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmittedMessage(`Order #${orderNumber || 'MM-84920'} is in transit via Trax Logistics. Expected delivery: 2-3 business days.`);
+    onClose();
+    const query = orderNumber.trim();
+    if (query) {
+      navigate(`/my-orders?q=${encodeURIComponent(query)}`);
+    } else {
+      navigate('/my-orders');
+    }
   };
 
   return (
@@ -131,24 +139,41 @@ export const AccountModal: React.FC<AccountModalProps> = ({ isOpen, onClose }) =
             <form onSubmit={handleTrackSubmit} className="mt-5 space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider mb-1.5">
-                  Order Number
+                  Order ID or Mobile Number
                 </label>
                 <input
                   type="text"
                   required
                   value={orderNumber}
                   onChange={(e) => setOrderNumber(e.target.value)}
-                  placeholder="e.g. MM-84920"
+                  placeholder="e.g. MM-94821 or 0300 1234567"
                   className="w-full px-3 py-2.5 text-sm rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] focus:border-transparent text-neutral-900"
                 />
+                <p className="text-[11px] text-neutral-400 mt-1">
+                  Find orders placed using your contact details or Order receipt number.
+                </p>
               </div>
 
               <button
                 type="submit"
-                className="w-full py-3 px-4 rounded-xl bg-[#E84D3D] hover:bg-[#DF3E2E] text-white text-sm font-semibold transition-colors shadow-sm"
+                className="w-full py-3 px-4 rounded-xl bg-[#E84D3D] hover:bg-[#DF3E2E] text-white text-sm font-semibold transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2"
               >
-                Track Status
+                <Package className="w-4 h-4" />
+                <span>Track Order Live</span>
               </button>
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    navigate('/my-orders');
+                  }}
+                  className="text-xs text-neutral-500 hover:text-neutral-900 underline font-medium cursor-pointer"
+                >
+                  Go to All My Orders Tracker Page
+                </button>
+              </div>
             </form>
           )}
         </div>
