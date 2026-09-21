@@ -857,13 +857,20 @@ export const AdminPage: React.FC = () => {
               ) : (
                 filteredOrders.map((order) => {
                   // Pre-format WhatsApp message for courier update
+                  const waPaymentMethod =
+                    order.paymentMethod === 'bank_transfer'
+                      ? 'Meezan Bank Transfer'
+                      : order.paymentMethod === 'raast'
+                      ? 'Raast Payment'
+                      : order.paymentMethod.toUpperCase();
+
                   const waCustomerMsg = `Salam ${order.customer.fullName}! 👋 
 This is Mani Minars Customer Logistics regarding your order #${order.id}.
 Status: ${order.status.toUpperCase()}
 Tracking Number: ${order.trackingNumber || 'Pending Courier Scan'}
 Courier: ${order.courier || 'Trax Logistics'}
-Total Payable: PKR ${order.total.toLocaleString()} (${order.paymentMethod.toUpperCase()})
-Delivery Address: ${order.customer.address}, ${order.customer.city}`;
+Total Payable: PKR ${order.total.toLocaleString()} (${waPaymentMethod})
+${order.paymentReference ? `Payment Ref: ${order.paymentReference}\n` : ''}Delivery Address: ${order.customer.address}, ${order.customer.city}`;
 
                   const cleanCustomerPhone = order.customer.phone.replace(/[^0-9]/g, '');
 
@@ -952,6 +959,48 @@ Delivery Address: ${order.customer.address}, ${order.customer.city}`;
                               Note: {order.customer.notes}
                             </p>
                           )}
+
+                          {/* Payment details & verification proof */}
+                          <div className="pt-2 mt-2 border-t border-neutral-100 space-y-1.5 bg-neutral-50/70 p-2.5 rounded-xl border border-neutral-100">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-neutral-500 font-medium">Payment Mode:</span>
+                              <span className="font-semibold text-neutral-800">
+                                {order.paymentMethod === 'bank_transfer'
+                                  ? 'Meezan Bank'
+                                  : order.paymentMethod === 'raast'
+                                  ? 'Raast (03046466815)'
+                                  : order.paymentMethod.toUpperCase()}
+                              </span>
+                            </div>
+
+                            {order.paymentReference && (
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="text-neutral-500 font-medium">TID / Ref:</span>
+                                <span className="font-mono font-bold text-neutral-900 bg-white px-2 py-0.5 rounded border border-neutral-200">
+                                  {order.paymentReference}
+                                </span>
+                              </div>
+                            )}
+
+                            {order.paymentProofImage && (
+                              <div className="flex items-center justify-between pt-1 border-t border-neutral-200/60">
+                                <span className="text-neutral-500 font-medium text-[11px]">Screenshot:</span>
+                                <a
+                                  href={order.paymentProofImage}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                                >
+                                  <img
+                                    src={order.paymentProofImage}
+                                    alt="Payment proof"
+                                    className="w-7 h-7 object-cover rounded border border-neutral-300"
+                                  />
+                                  <span>View Proof</span>
+                                </a>
+                              </div>
+                            )}
+                          </div>
                         </div>
 
                         {/* Items ordered (4 cols) */}

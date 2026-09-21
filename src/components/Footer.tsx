@@ -204,14 +204,11 @@ export const Footer: React.FC = () => {
             </Link>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded bg-neutral-800 text-[10px] font-semibold text-neutral-300">
-              Visa / Mastercard
+            <span className="px-2.5 py-1 rounded bg-neutral-800 text-[10px] font-semibold text-neutral-300">
+              Meezan Bank Transfer
             </span>
-            <span className="px-2 py-0.5 rounded bg-neutral-800 text-[10px] font-semibold text-neutral-300">
-              JazzCash
-            </span>
-            <span className="px-2 py-0.5 rounded bg-neutral-800 text-[10px] font-semibold text-neutral-300">
-              EasyPaisa
+            <span className="px-2.5 py-1 rounded bg-neutral-800 text-[10px] font-semibold text-neutral-300">
+              Raast (03046466815)
             </span>
           </div>
         </div>

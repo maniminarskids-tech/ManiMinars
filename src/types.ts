@@ -82,7 +82,7 @@ export interface FilterState {
 export type SortOption = 'featured' | 'newest' | 'price-low' | 'price-high';
 
 export type OrderStatus = 'pending' | 'confirmed' | 'dispatched' | 'delivered' | 'cancelled';
-export type PaymentMethod = 'cod' | 'card' | 'wallet' | 'bank_transfer';
+export type PaymentMethod = 'bank_transfer' | 'raast' | 'cod' | 'card' | 'wallet';
 export type PaymentStatus = 'pending' | 'completed' | 'failed';
 
 export interface Order {
@@ -102,6 +102,8 @@ export interface Order {
   discount: number;
   total: number;
   paymentMethod: PaymentMethod;
+  paymentReference?: string;
+  paymentProofImage?: string;
   paymentStatus?: PaymentStatus;
   shippingTier?: ShippingTier;
   couponCode?: string;
