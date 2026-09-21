@@ -43,11 +43,170 @@ import {
   LogOut,
   AlertTriangle,
   Database,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 const KIDS_PRESET_SIZES = ['1-2Y', '2-3Y', '3-4Y', '4-5Y', '5-6Y', '6-7Y', '7-8Y', '8-9Y', '9-10Y'];
 const JUNIORS_PRESET_SIZES = ['11-12Y', '12-13Y', '13-14Y', '14-15Y', '15-16Y'];
 const SPECIALTY_PRESET_SIZES = ['0-6M', '6-12M', 'Free Size', 'One Size'];
+
+export interface NormalizedOrderProduct {
+  id: string;
+  name: string;
+  image: string;
+  size: string;
+  colorName: string;
+  colorHex?: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+/**
+ * Normalizes ordered products from products_json or items field.
+ * Handles nested product objects, flattened structures, and various naming conventions.
+ */
+export function extractOrderProducts(order: Order): NormalizedOrderProduct[] {
+  let rawList: any[] = [];
+
+  if (Array.isArray(order.items) && order.items.length > 0) {
+    rawList = order.items;
+  } else if (Array.isArray(order.products_json) && order.products_json.length > 0) {
+    rawList = order.products_json;
+  } else if (typeof order.products_json === 'string') {
+    try {
+      const parsed = JSON.parse(order.products_json);
+      if (Array.isArray(parsed)) rawList = parsed;
+      else if (parsed && typeof parsed === 'object') rawList = [parsed];
+    } catch {
+      rawList = [];
+    }
+  } else if (typeof (order as any).items === 'string') {
+    try {
+      const parsed = JSON.parse((order as any).items);
+      if (Array.isArray(parsed)) rawList = parsed;
+      else if (parsed && typeof parsed === 'object') rawList = [parsed];
+    } catch {
+      rawList = [];
+    }
+  }
+
+  // If still empty but order itself has product fields (flattened single order)
+  if (rawList.length === 0 && ((order as any).product_name || (order as any).productName)) {
+    rawList = [order];
+  }
+
+  return rawList.map((item, index) => {
+    if (!item || typeof item !== 'object') {
+      return {
+        id: `item-${index}`,
+        name: String(item || 'Ordered Product'),
+        image: FALLBACK_GARMENT_IMAGE,
+        size: 'Standard',
+        colorName: 'Standard',
+        colorHex: undefined,
+        quantity: 1,
+        unitPrice: 0,
+        lineTotal: 0,
+      };
+    }
+
+    // 1. Product Name
+    const name =
+      item.product?.name ||
+      item.name ||
+      item.product_name ||
+      item.productName ||
+      item.title ||
+      item.item_name ||
+      `Product #${index + 1}`;
+
+    // 2. Product Image
+    let image =
+      item.product?.images?.[0] ||
+      item.product?.image ||
+      item.image ||
+      item.product_image ||
+      item.productImage ||
+      item.selectedColor?.image ||
+      item.selected_color?.image ||
+      (Array.isArray(item.images) && item.images[0]) ||
+      FALLBACK_GARMENT_IMAGE;
+
+    if (!image || typeof image !== 'string' || image.trim() === '') {
+      image = FALLBACK_GARMENT_IMAGE;
+    }
+
+    // 3. Selected Size
+    const size =
+      item.selectedSize ||
+      item.selected_size ||
+      item.size ||
+      item.selected_size_name ||
+      item.variant?.size ||
+      'Standard';
+
+    // 4. Selected Color
+    let colorName = 'Standard';
+    let colorHex: string | undefined = undefined;
+
+    if (item.selectedColor) {
+      if (typeof item.selectedColor === 'string') {
+        colorName = item.selectedColor;
+      } else if (typeof item.selectedColor === 'object') {
+        colorName = item.selectedColor.name || item.selectedColor.color || item.selectedColor.title || 'Standard';
+        colorHex = item.selectedColor.hex;
+      }
+    } else if (item.selected_color) {
+      if (typeof item.selected_color === 'string') {
+        colorName = item.selected_color;
+      } else if (typeof item.selected_color === 'object') {
+        colorName = item.selected_color.name || 'Standard';
+        colorHex = item.selected_color.hex;
+      }
+    } else if (item.color) {
+      if (typeof item.color === 'string') {
+        colorName = item.color;
+      } else if (typeof item.color === 'object') {
+        colorName = item.color.name || item.color.title || 'Standard';
+        colorHex = item.color.hex;
+      }
+    }
+
+    // 5. Quantity
+    const quantity = Math.max(1, Number(item.quantity ?? item.qty ?? item.count ?? item.amount ?? 1) || 1);
+
+    // 6. Unit Price
+    let unitPrice = Number(
+      item.unitPrice ??
+      item.unit_price ??
+      item.price ??
+      item.product?.price ??
+      0
+    );
+
+    const rawLineTotal = Number(item.lineTotal ?? item.line_total ?? item.total);
+    if ((!unitPrice || unitPrice === 0) && rawLineTotal > 0) {
+      unitPrice = Math.round(rawLineTotal / quantity);
+    }
+
+    // 7. Line Total
+    const lineTotal = rawLineTotal > 0 ? rawLineTotal : unitPrice * quantity;
+
+    return {
+      id: String(item.id || item.productId || item.product_id || item.product?.id || `item-${index}`),
+      name,
+      image,
+      size,
+      colorName,
+      colorHex,
+      quantity,
+      unitPrice,
+      lineTotal,
+    };
+  });
+}
 
 /**
  * Automatically compress and scale uploaded garment images so they load instantly
@@ -188,6 +347,16 @@ export const AdminPage: React.FC = () => {
   const [inventorySearch, setInventorySearch] = useState('');
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
+
+  // Track collapsed state for order product details (empty object = expanded by default)
+  const [collapsedOrderIds, setCollapsedOrderIds] = useState<Record<string, boolean>>({});
+
+  const toggleOrderDetails = (orderId: string) => {
+    setCollapsedOrderIds((prev) => ({
+      ...prev,
+      [orderId]: !prev[orderId],
+    }));
+  };
 
   // Delivery settings form
   const [deliveryForm, setDeliveryForm] = useState({
@@ -1147,12 +1316,12 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                         </div>
                       </div>
 
-                      {/* Content: Customer details + Items + Payment Proof + Admin Actions */}
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-                        {/* 1. Customer & Phone info (3 cols) */}
-                        <div className="md:col-span-3 space-y-2 text-xs">
+                      {/* Content: Customer details + Payment Details & Proof + Admin Actions */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                        {/* 1. Customer & Phone info (4 cols) */}
+                        <div className="lg:col-span-4 space-y-2 text-xs">
                           <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
-                            Customer Details
+                            Customer & Delivery
                           </span>
                           <div>
                             <h4 className="font-bold text-neutral-900 text-sm">
@@ -1172,7 +1341,7 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                               )}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-2.5 py-1 rounded-xl transition-colors w-full justify-center"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 px-2.5 py-1.5 rounded-xl transition-colors w-full justify-center"
                             >
                               <MessageCircle className="w-3.5 h-3.5" />
                               <span>WhatsApp Customer</span>
@@ -1191,55 +1360,8 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                           </div>
                         </div>
 
-                        {/* 2. Products ordered (3 cols) */}
-                        <div className="md:col-span-3 text-xs space-y-2 border-t md:border-t-0 md:border-l border-neutral-100 md:pl-4">
-                          <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
-                            Products Ordered ({order.items.length})
-                          </span>
-                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                            {order.items.map((item, idx) => (
-                              <div key={idx} className="flex justify-between items-start text-[11px] gap-2">
-                                <div className="space-y-0.5">
-                                  <span className="font-semibold text-neutral-800 line-clamp-1">
-                                    {item.quantity}x {item.product.name}
-                                  </span>
-                                  <span className="text-[10px] text-neutral-500 block">
-                                    Size: {item.selectedSize} {item.selectedColor ? `• ${item.selectedColor.name}` : ''}
-                                  </span>
-                                </div>
-                                <span className="font-semibold text-neutral-900 shrink-0">
-                                  PKR {(item.price * item.quantity).toLocaleString()}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="pt-2 border-t border-neutral-100 space-y-1 text-[11px]">
-                            <div className="flex justify-between text-neutral-500">
-                              <span>Subtotal:</span>
-                              <span>PKR {order.subtotal.toLocaleString()}</span>
-                            </div>
-                            <div className="flex justify-between text-neutral-500">
-                              <span>Delivery:</span>
-                              <span>PKR {order.deliveryFee.toLocaleString()}</span>
-                            </div>
-                            {order.discount > 0 && (
-                              <div className="flex justify-between text-red-600 font-medium">
-                                <span>Discount:</span>
-                                <span>-PKR {order.discount.toLocaleString()}</span>
-                              </div>
-                            )}
-                            <div className="pt-1.5 border-t border-neutral-200 flex justify-between font-bold text-xs text-neutral-900">
-                              <span>Total Amount:</span>
-                              <span className="text-sm font-extrabold text-[#E84D3D]">
-                                PKR {order.total.toLocaleString()}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 3. Payment details & Proof (3 cols) */}
-                        <div className="md:col-span-3 text-xs space-y-2 border-t md:border-t-0 md:border-l border-neutral-100 md:pl-4">
+                        {/* 2. Payment details & Proof (4 cols) */}
+                        <div className="lg:col-span-4 text-xs space-y-2 border-t lg:border-t-0 lg:border-l border-neutral-100 lg:pl-4">
                           <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
                             Payment Details & Proof
                           </span>
@@ -1326,10 +1448,10 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                           </div>
                         </div>
 
-                        {/* 4. Admin Actions (3 cols): Approve & Reject */}
-                        <div className="md:col-span-3 text-xs space-y-3 border-t md:border-t-0 md:border-l border-neutral-100 md:pl-4">
+                        {/* 3. Admin Actions (4 cols): Approve & Reject & Logistics */}
+                        <div className="lg:col-span-4 text-xs space-y-3 border-t lg:border-t-0 lg:border-l border-neutral-100 lg:pl-4">
                           <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
-                            Admin Verification Actions
+                            Verification & Logistics
                           </span>
 
                           {/* Primary Decision Actions: Approve & Reject Buttons */}
@@ -1409,6 +1531,174 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                           </div>
                         </div>
                       </div>
+
+                      {/* Dedicated Ordered Products Section (Full Width with Expandable Details) */}
+                      {(() => {
+                        const orderProducts = extractOrderProducts(order);
+                        const isDetailsOpen = !collapsedOrderIds[order.id];
+
+                        return (
+                          <div className="pt-3 border-t border-neutral-100 space-y-3">
+                            {/* Products Section Header Bar */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-neutral-50/90 px-4 py-2.5 rounded-xl border border-neutral-200/80">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <div className="p-1.5 bg-[#E84D3D]/10 rounded-lg text-[#E84D3D]">
+                                  <ShoppingBag className="w-4 h-4" />
+                                </div>
+                                <span className="font-bold text-xs text-neutral-900">
+                                  Ordered Products ({orderProducts.length} {orderProducts.length === 1 ? 'item' : 'items'})
+                                </span>
+                                <span className="text-[11px] text-neutral-400 hidden sm:inline">•</span>
+                                <span className="text-[11px] text-neutral-600 block sm:inline">
+                                  Total: <strong className="text-[#E84D3D] font-extrabold">PKR {order.total.toLocaleString()}</strong>
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => toggleOrderDetails(order.id)}
+                                className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-800 hover:text-neutral-950 px-3 py-1.5 rounded-lg bg-white border border-neutral-200 shadow-2xs hover:bg-neutral-50 transition-colors cursor-pointer self-start sm:self-auto"
+                              >
+                                <span>{isDetailsOpen ? 'Hide Order Details' : 'View Order Details'}</span>
+                                {isDetailsOpen ? (
+                                  <ChevronUp className="w-3.5 h-3.5 text-neutral-500" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5 text-neutral-500" />
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Ordered Products Table - Displays all 7 requested fields */}
+                            {isDetailsOpen && (
+                              <div className="space-y-3 animate-in fade-in duration-150">
+                                {orderProducts.length === 0 ? (
+                                  <div className="p-6 rounded-xl bg-neutral-50 border border-dashed border-neutral-200 text-center">
+                                    <p className="text-xs font-bold text-neutral-600">No ordered products found</p>
+                                    <p className="text-[11px] text-neutral-400 mt-0.5">
+                                      Checked products_json and items fields in the orders table.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white shadow-2xs">
+                                    <table className="w-full text-left text-xs min-w-[620px]">
+                                      <thead className="bg-neutral-50/90 text-[10px] font-bold uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
+                                        <tr>
+                                          <th className="py-2.5 px-4">Product Image & Name</th>
+                                          <th className="py-2.5 px-3">Selected Size</th>
+                                          <th className="py-2.5 px-3">Selected Color</th>
+                                          <th className="py-2.5 px-3 text-center">Quantity</th>
+                                          <th className="py-2.5 px-3 text-right">Unit Price</th>
+                                          <th className="py-2.5 px-4 text-right">Line Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-neutral-100">
+                                        {orderProducts.map((p, pIdx) => (
+                                          <tr key={p.id || pIdx} className="hover:bg-neutral-50/50 transition-colors">
+                                            {/* 1 & 2: Product Image & Product Name */}
+                                            <td className="py-3 px-4">
+                                              <div className="flex items-center gap-3">
+                                                <img
+                                                  src={p.image}
+                                                  alt={p.name}
+                                                  onError={(e) => {
+                                                    (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
+                                                  }}
+                                                  className="w-13 h-13 object-cover rounded-xl border border-neutral-200 bg-neutral-100 shadow-2xs shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                                  onClick={() => setProofModalUrl({ url: p.image, orderId: `${order.id} - ${p.name}` })}
+                                                  title="Click to view image preview"
+                                                />
+                                                <div className="min-w-0">
+                                                  <span className="font-bold text-neutral-900 text-xs block leading-snug">
+                                                    {p.name}
+                                                  </span>
+                                                  <span className="text-[10px] text-neutral-400 mt-0.5 block">
+                                                    Item #{pIdx + 1}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </td>
+
+                                            {/* 3: Selected Size */}
+                                            <td className="py-3 px-3">
+                                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-xs bg-neutral-100 text-neutral-800 border border-neutral-200/80">
+                                                {p.size}
+                                              </span>
+                                            </td>
+
+                                            {/* 4: Selected Color */}
+                                            <td className="py-3 px-3">
+                                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-neutral-50 text-neutral-800 border border-neutral-200">
+                                                {p.colorHex ? (
+                                                  <span
+                                                    className="w-3.5 h-3.5 rounded-full border border-black/15 shadow-2xs shrink-0"
+                                                    style={{ backgroundColor: p.colorHex }}
+                                                  />
+                                                ) : (
+                                                  <span className="w-3 h-3 rounded-full bg-neutral-400 shrink-0" />
+                                                )}
+                                                <span>{p.colorName}</span>
+                                              </div>
+                                            </td>
+
+                                            {/* 5: Quantity */}
+                                            <td className="py-3 px-3 text-center">
+                                              <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full font-bold text-xs bg-neutral-100 text-neutral-900 border border-neutral-200">
+                                                {p.quantity}
+                                              </span>
+                                            </td>
+
+                                            {/* 6: Unit Price */}
+                                            <td className="py-3 px-3 text-right font-medium text-neutral-600 font-mono text-xs">
+                                              PKR {p.unitPrice.toLocaleString()}
+                                            </td>
+
+                                            {/* 7: Line Total */}
+                                            <td className="py-3 px-4 text-right font-bold text-neutral-900 font-mono text-xs">
+                                              PKR {p.lineTotal.toLocaleString()}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                      {/* Financial Breakdown Table Footer */}
+                                      <tfoot className="bg-neutral-50/80 border-t border-neutral-200 text-xs">
+                                        <tr>
+                                          <td colSpan={3} className="py-3 px-4 text-neutral-500 font-medium">
+                                            Financial Breakdown
+                                          </td>
+                                          <td colSpan={3} className="py-3 px-4 text-right">
+                                            <div className="space-y-1.5 max-w-xs ml-auto">
+                                              <div className="flex justify-between text-neutral-600 text-[11px]">
+                                                <span>Items Subtotal:</span>
+                                                <span className="font-mono font-medium">PKR {order.subtotal.toLocaleString()}</span>
+                                              </div>
+                                              <div className="flex justify-between text-neutral-600 text-[11px]">
+                                                <span>Delivery Fee ({order.shippingTier || 'standard'}):</span>
+                                                <span className="font-mono font-medium">PKR {order.deliveryFee.toLocaleString()}</span>
+                                              </div>
+                                              {order.discount > 0 && (
+                                                <div className="flex justify-between text-red-600 text-[11px] font-semibold">
+                                                  <span>Discount {order.couponCode ? `(${order.couponCode})` : ''}:</span>
+                                                  <span className="font-mono">-PKR {order.discount.toLocaleString()}</span>
+                                                </div>
+                                              )}
+                                              <div className="flex justify-between font-bold text-xs text-neutral-900 pt-1.5 border-t border-neutral-200">
+                                                <span>Total Amount:</span>
+                                                <span className="text-sm font-extrabold text-[#E84D3D] font-mono">
+                                                  PKR {order.total.toLocaleString()}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      </tfoot>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })

@@ -237,26 +237,41 @@ export function rowToOrder(row: any): Order {
         notes: row.notes || undefined,
       };
 
-  const rawProducts = row.products_json ?? row.items;
-  const items =
-    typeof rawProducts === 'string'
-      ? JSON.parse(rawProducts)
-      : Array.isArray(rawProducts)
-      ? rawProducts
-      : [];
+  const parseItems = (val: any): any[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        return [];
+      }
+    }
+    if (typeof val === 'object') return [val];
+    return [];
+  };
+
+  const fromProductsJson = parseItems(row.products_json);
+  const fromItems = parseItems(row.items);
+  const items = fromProductsJson.length > 0 ? fromProductsJson : fromItems;
 
   return {
     id: String(row.order_id || row.id),
+    order_id: String(row.order_id || row.id),
     createdAt: row.created_at || new Date().toISOString(),
     customer,
     items,
+    products_json: fromProductsJson.length > 0 ? fromProductsJson : fromItems,
     subtotal: Number(row.subtotal) || 0,
     deliveryFee: Number(row.delivery_fee) || 0,
     discount: Number(row.discount) || 0,
     total: Number(row.total_amount ?? row.total) || 0,
+    total_amount: Number(row.total_amount ?? row.total) || 0,
     paymentMethod: row.payment_method || 'bank_transfer',
     paymentReference: row.payment_reference || undefined,
     paymentProofImage: row.payment_proof_url ?? row.payment_proof_image ?? undefined,
+    paymentProofUrl: row.payment_proof_url ?? row.payment_proof_image ?? undefined,
     paymentStatus: row.payment_status || 'pending',
     shippingTier: row.shipping_tier || 'standard',
     couponCode: row.coupon_code || undefined,

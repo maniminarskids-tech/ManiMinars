@@ -95,6 +95,7 @@ export type PaymentStatus = 'pending' | 'completed' | 'failed';
 
 export interface Order {
   id: string;
+  order_id?: string;
   createdAt: string;
   customer: {
     fullName: string;
@@ -105,13 +106,16 @@ export interface Order {
     notes?: string;
   };
   items: CartItem[];
+  products_json?: any;
   subtotal: number;
   deliveryFee: number;
   discount: number;
   total: number;
+  total_amount?: number;
   paymentMethod: PaymentMethod;
   paymentReference?: string;
   paymentProofImage?: string;
+  paymentProofUrl?: string;
   paymentStatus?: PaymentStatus;
   shippingTier?: ShippingTier;
   couponCode?: string;
