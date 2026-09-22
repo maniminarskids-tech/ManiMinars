@@ -37,6 +37,27 @@ import {
 } from '../utils/orderUtils';
 import { getSupabase } from '../services/supabase';
 
+export function getOrderItems(order: any): any[] {
+  if (!order) return [];
+
+  if (Array.isArray(order.items)) return order.items;
+
+  if (typeof order.items === "string") {
+    try { return JSON.parse(order.items); }
+    catch {}
+  }
+
+  if (Array.isArray(order.products_json))
+    return order.products_json;
+
+  if (typeof order.products_json === "string") {
+    try { return JSON.parse(order.products_json); }
+    catch {}
+  }
+
+  return [];
+}
+
 // Visual timeline steps
 const TIMELINE_STEPS = [
   {
@@ -640,7 +661,9 @@ export default function MyOrdersPage() {
             </div>
 
             {filteredOrders.map((order) => {
-              const products = extractOrderProducts(order);
+              console.log("ORDER:", order);
+              console.log("ORDER ITEMS:", getOrderItems(order));
+              const orderItems = getOrderItems(order);
               const statusNormalized = normalizeOrderStatus(order.status);
               const paymentInfo = getPaymentMethodDisplay(order);
 
@@ -912,96 +935,112 @@ export default function MyOrdersPage() {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5">
                         <ShoppingBag className="w-4 h-4 text-[#E84D3D]" />
-                        <span>Products Ordered ({products.length})</span>
+                        <span>Products Ordered ({orderItems.length})</span>
                       </h4>
                       <span className="text-xs text-neutral-400 font-medium">PKR Currency</span>
                     </div>
 
-                    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-                      <table className="w-full text-left text-xs min-w-[580px]">
-                        <thead className="bg-neutral-50/90 text-[10px] font-bold uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
-                          <tr>
-                            <th className="py-2.5 px-4">Garment</th>
-                            <th className="py-2.5 px-3">Size</th>
-                            <th className="py-2.5 px-3">Color</th>
-                            <th className="py-2.5 px-3 text-center">Qty</th>
-                            <th className="py-2.5 px-3 text-right">Price</th>
-                            <th className="py-2.5 px-4 text-right">Line Total</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-100">
-                          {products.map((item, idx) => (
-                            <tr key={item.id || idx} className="hover:bg-neutral-50/40 transition-colors">
-                              {/* Product Image & Name */}
-                              <td className="py-3 px-4">
-                                <div className="flex items-center gap-3">
-                                  <img
-                                    src={item.image}
-                                    alt={item.name}
-                                    onError={(e) => {
-                                      (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
-                                    }}
-                                    onClick={() =>
-                                      setPreviewImage({
-                                        url: item.image,
-                                        title: item.name,
-                                      })
-                                    }
-                                    className="w-12 h-12 rounded-xl object-cover border border-neutral-200 bg-neutral-100 shrink-0 cursor-pointer hover:opacity-85 transition-opacity"
-                                    title="Click to zoom image"
-                                  />
-                                  <div>
-                                    <span className="font-bold text-neutral-900 block leading-snug">
-                                      {item.name}
-                                    </span>
-                                    <span className="text-[10px] text-neutral-400 block mt-0.5">
-                                      Item #{idx + 1}
-                                    </span>
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* Size */}
-                              <td className="py-3 px-3">
-                                <span className="inline-block px-2.5 py-1 rounded-lg font-bold text-xs bg-neutral-100 text-neutral-800 border border-neutral-200/80">
-                                  {item.size}
-                                </span>
-                              </td>
-
-                              {/* Color */}
-                              <td className="py-3 px-3">
-                                <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-neutral-50 border border-neutral-200 text-neutral-800 text-xs">
-                                  {item.colorHex ? (
-                                    <span
-                                      className="w-3.5 h-3.5 rounded-full border border-black/15 shadow-2xs shrink-0"
-                                      style={{ backgroundColor: item.colorHex }}
-                                    />
-                                  ) : (
-                                    <span className="w-3 h-3 rounded-full bg-neutral-400 shrink-0" />
-                                  )}
-                                  <span className="font-medium">{item.colorName}</span>
-                                </div>
-                              </td>
-
-                              {/* Quantity */}
-                              <td className="py-3 px-3 text-center">
-                                <span className="inline-flex items-center justify-center min-w-[26px] px-2 py-0.5 rounded-full font-bold text-xs bg-neutral-100 text-neutral-800">
-                                  {item.quantity}
-                                </span>
-                              </td>
-
-                              {/* Unit Price */}
-                              <td className="py-3 px-3 text-right font-mono text-neutral-600">
-                                PKR {item.unitPrice.toLocaleString()}
-                              </td>
-
-                              {/* Line Total */}
-                              <td className="py-3 px-4 text-right font-mono font-bold text-neutral-900">
-                                PKR {item.lineTotal.toLocaleString()}
-                              </td>
+                    {orderItems.length === 0 ? (
+                      <div className="p-6 rounded-xl bg-neutral-50 text-neutral-400 text-xs italic border border-neutral-200 text-center">
+                        No products found in order
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+                        <table className="w-full text-left text-xs min-w-[580px]">
+                          <thead className="bg-neutral-50/90 text-[10px] font-bold uppercase tracking-wider text-neutral-500 border-b border-neutral-200">
+                            <tr>
+                              <th className="py-2.5 px-4">Product Name</th>
+                              <th className="py-2.5 px-3">Size</th>
+                              <th className="py-2.5 px-3">Color</th>
+                              <th className="py-2.5 px-3 text-center">Quantity</th>
+                              <th className="py-2.5 px-3 text-right">Price</th>
+                              <th className="py-2.5 px-4 text-right">Line Total</th>
                             </tr>
-                          ))}
-                        </tbody>
+                          </thead>
+                          <tbody className="divide-y divide-neutral-100">
+                            {orderItems.map((item: any, idx: number) => {
+                              const productName = item.product?.name || item.name || item.product_name || item.title || 'Product';
+                              const size = item.selectedSize || item.size || item.selected_size || 'Standard';
+                              const colorName = item.selectedColor?.name || (typeof item.selectedColor === 'string' ? item.selectedColor : item.color || item.selected_color || item.colorName || 'Standard');
+                              const colorHex = item.selectedColor?.hex || item.colorHex;
+                              const quantity = item.quantity || item.qty || 1;
+                              const unitPrice = Number(item.price ?? item.unitPrice ?? item.product?.price ?? 0);
+                              const lineTotal = Number(item.lineTotal ?? item.total ?? (unitPrice * quantity));
+                              const image = item.product?.images?.[0] || item.product?.colors?.[0]?.image || item.image || item.imageUrl || FALLBACK_GARMENT_IMAGE;
+
+                              return (
+                                <tr key={item.id || idx} className="hover:bg-neutral-50/40 transition-colors">
+                                  {/* Product Name */}
+                                  <td className="py-3 px-4">
+                                    <div className="flex items-center gap-3">
+                                      <img
+                                        src={image}
+                                        alt={productName}
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
+                                        }}
+                                        onClick={() =>
+                                          setPreviewImage({
+                                            url: image,
+                                            title: productName,
+                                          })
+                                        }
+                                        className="w-12 h-12 rounded-xl object-cover border border-neutral-200 bg-neutral-100 shrink-0 cursor-pointer hover:opacity-85 transition-opacity"
+                                        title="Click to zoom image"
+                                      />
+                                      <div>
+                                        <span className="font-bold text-neutral-900 block leading-snug">
+                                          {productName}
+                                        </span>
+                                        <span className="text-[10px] text-neutral-400 block mt-0.5">
+                                          Item #{idx + 1}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* Size */}
+                                  <td className="py-3 px-3">
+                                    <span className="inline-block px-2.5 py-1 rounded-lg font-bold text-xs bg-neutral-100 text-neutral-800 border border-neutral-200/80">
+                                      {size}
+                                    </span>
+                                  </td>
+
+                                  {/* Color */}
+                                  <td className="py-3 px-3">
+                                    <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-neutral-50 border border-neutral-200 text-neutral-800 text-xs">
+                                      {colorHex ? (
+                                        <span
+                                          className="w-3.5 h-3.5 rounded-full border border-black/15 shadow-2xs shrink-0"
+                                          style={{ backgroundColor: colorHex }}
+                                        />
+                                      ) : (
+                                        <span className="w-3 h-3 rounded-full bg-neutral-400 shrink-0" />
+                                      )}
+                                      <span className="font-medium">{colorName}</span>
+                                    </div>
+                                  </td>
+
+                                  {/* Quantity */}
+                                  <td className="py-3 px-3 text-center">
+                                    <span className="inline-flex items-center justify-center min-w-[26px] px-2 py-0.5 rounded-full font-bold text-xs bg-neutral-100 text-neutral-800">
+                                      {quantity}
+                                    </span>
+                                  </td>
+
+                                  {/* Price */}
+                                  <td className="py-3 px-3 text-right font-mono text-neutral-600">
+                                    PKR {unitPrice.toLocaleString()}
+                                  </td>
+
+                                  {/* Line Total */}
+                                  <td className="py-3 px-4 text-right font-mono font-bold text-neutral-900">
+                                    PKR {lineTotal.toLocaleString()}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
                         {/* Financial Summary Footer */}
                         <tfoot className="bg-neutral-50/80 border-t border-neutral-200">
                           <tr>
@@ -1036,7 +1075,8 @@ export default function MyOrdersPage() {
                         </tfoot>
                       </table>
                     </div>
-                  </div>
+                  )}
+                </div>
 
                   {/* Order Card Footer: Help / WhatsApp Action */}
                   <div className="bg-neutral-50 px-5 sm:px-7 py-3.5 border-t border-neutral-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">

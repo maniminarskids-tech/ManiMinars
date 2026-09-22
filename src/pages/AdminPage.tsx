@@ -63,6 +63,27 @@ export interface NormalizedOrderProduct {
   lineTotal: number;
 }
 
+export function getOrderItems(order: any): any[] {
+  if (!order) return [];
+
+  if (Array.isArray(order.items)) return order.items;
+
+  if (typeof order.items === "string") {
+    try { return JSON.parse(order.items); }
+    catch {}
+  }
+
+  if (Array.isArray(order.products_json))
+    return order.products_json;
+
+  if (typeof order.products_json === "string") {
+    try { return JSON.parse(order.products_json); }
+    catch {}
+  }
+
+  return [];
+}
+
 /**
  * Normalizes ordered products from products_json or items field.
  * Handles nested product objects, flattened structures, and various naming conventions.
@@ -1226,19 +1247,9 @@ export const AdminPage: React.FC = () => {
                 </div>
               ) : (
                 filteredOrders.map((order) => {
-                  const rawItems: any = order.items;
-                  const rawProductsJson: any = order.products_json;
-
-                  const orderProducts: any[] =
-                    Array.isArray(rawItems) && rawItems.length > 0
-                      ? rawItems
-                      : Array.isArray(rawProductsJson)
-                      ? rawProductsJson
-                      : typeof rawItems === 'string' && rawItems.trim().startsWith('[')
-                      ? (() => { try { return JSON.parse(rawItems); } catch { return []; } })()
-                      : typeof rawProductsJson === 'string' && rawProductsJson.trim().startsWith('[')
-                      ? (() => { try { return JSON.parse(rawProductsJson); } catch { return []; } })()
-                      : [];
+                  console.log("ORDER:", order);
+                  console.log("ORDER ITEMS:", getOrderItems(order));
+                  const orderItems = getOrderItems(order);
 
                   // Pre-format WhatsApp message for courier update
                   const waPaymentMethod =
@@ -1387,34 +1398,42 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                             <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-500 block">
                               Ordered Products
                             </span>
-                            {orderProducts.length === 0 ? (
+                            {orderItems.length === 0 ? (
                               <div className="p-2.5 rounded-lg bg-neutral-50 text-neutral-400 text-xs italic border border-neutral-200">
                                 No products found in order
                               </div>
                             ) : (
                               <div className="space-y-2">
-                                {orderProducts.map((item: any, index: number) => (
-                                  <div
-                                    key={index}
-                                    className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200 text-xs space-y-0.5"
-                                  >
-                                    <div className="font-bold text-neutral-900">
-                                      {item.product?.name || item.name}
+                                {orderItems.map((item: any, index: number) => {
+                                  const productName = item.product?.name || item.name || item.product_name || item.title || 'Product';
+                                  const size = item.selectedSize || item.size || item.selected_size || 'Standard';
+                                  const color = item.selectedColor?.name || (typeof item.selectedColor === 'string' ? item.selectedColor : item.color || item.selected_color || item.colorName || 'Standard');
+                                  const quantity = item.quantity || item.qty || 1;
+                                  const price = item.price ?? item.unitPrice ?? item.product?.price ?? 0;
+
+                                  return (
+                                    <div
+                                      key={index}
+                                      className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200 text-xs space-y-0.5"
+                                    >
+                                      <div className="font-bold text-neutral-900">
+                                        {productName}
+                                      </div>
+                                      <div className="text-neutral-600">
+                                        Size: {size}
+                                      </div>
+                                      <div className="text-neutral-600">
+                                        Color: {color}
+                                      </div>
+                                      <div className="text-neutral-600">
+                                        Qty: {quantity}
+                                      </div>
+                                      <div className="font-semibold text-neutral-900">
+                                        PKR {Number(price).toLocaleString()}
+                                      </div>
                                     </div>
-                                    <div className="text-neutral-600">
-                                      Size: {item.selectedSize || item.size || 'Standard'}
-                                    </div>
-                                    <div className="text-neutral-600">
-                                      Color: {item.selectedColor?.name || (typeof item.selectedColor === 'string' ? item.selectedColor : item.color) || 'Standard'}
-                                    </div>
-                                    <div className="text-neutral-600">
-                                      Qty: {item.quantity || 1}
-                                    </div>
-                                    <div className="font-semibold text-neutral-900">
-                                      PKR {item.price ?? item.product?.price ?? 0}
-                                    </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
