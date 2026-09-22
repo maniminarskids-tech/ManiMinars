@@ -40,19 +40,51 @@ import { getSupabase } from '../services/supabase';
 export function getOrderItems(order: any): any[] {
   if (!order) return [];
 
-  if (Array.isArray(order.items)) return order.items;
+  const parseCandidate = (val: any): any[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[]') return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed;
+        if (typeof parsed === 'string') {
+          try {
+            const doubleParsed = JSON.parse(parsed);
+            if (Array.isArray(doubleParsed)) return doubleParsed;
+            if (doubleParsed && typeof doubleParsed === 'object') return [doubleParsed];
+          } catch {}
+        }
+        if (parsed && typeof parsed === 'object') return [parsed];
+      } catch {}
+      return [];
+    }
+    if (typeof val === 'object') return [val];
+    return [];
+  };
 
-  if (typeof order.items === "string") {
-    try { return JSON.parse(order.items); }
-    catch {}
+  // 1. Try order.products_json first
+  const fromProductsJson = parseCandidate(order.products_json);
+  if (fromProductsJson.length > 0) {
+    return fromProductsJson;
   }
 
-  if (Array.isArray(order.products_json))
-    return order.products_json;
+  // 2. Try order.items
+  const fromItems = parseCandidate(order.items);
+  if (fromItems.length > 0) {
+    return fromItems;
+  }
 
-  if (typeof order.products_json === "string") {
-    try { return JSON.parse(order.products_json); }
-    catch {}
+  // Fallback if order has products or items_json
+  const fromProducts = parseCandidate((order as any).products);
+  if (fromProducts.length > 0) {
+    return fromProducts;
+  }
+
+  const fromItemsJson = parseCandidate((order as any).items_json);
+  if (fromItemsJson.length > 0) {
+    return fromItemsJson;
   }
 
   return [];
@@ -661,9 +693,9 @@ export default function MyOrdersPage() {
             </div>
 
             {filteredOrders.map((order) => {
-              console.log("ORDER:", order);
-              console.log("ORDER ITEMS:", getOrderItems(order));
-              const orderItems = getOrderItems(order);
+              const extractedProducts = getOrderItems(order);
+              console.log("ORDER PRODUCTS:", order.products_json);
+              console.log("PARSED PRODUCTS:", extractedProducts);
               const statusNormalized = normalizeOrderStatus(order.status);
               const paymentInfo = getPaymentMethodDisplay(order);
 
@@ -935,12 +967,12 @@ export default function MyOrdersPage() {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5">
                         <ShoppingBag className="w-4 h-4 text-[#E84D3D]" />
-                        <span>Products Ordered ({orderItems.length})</span>
+                        <span>Products Ordered ({extractedProducts.length})</span>
                       </h4>
                       <span className="text-xs text-neutral-400 font-medium">PKR Currency</span>
                     </div>
 
-                    {orderItems.length === 0 ? (
+                    {extractedProducts.length === 0 ? (
                       <div className="p-6 rounded-xl bg-neutral-50 text-neutral-400 text-xs italic border border-neutral-200 text-center">
                         No products found in order
                       </div>
@@ -958,15 +990,16 @@ export default function MyOrdersPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-neutral-100">
-                            {orderItems.map((item: any, idx: number) => {
+                            {extractedProducts.map((item: any, idx: number) => {
                               const productName = item.product?.name || item.name || item.product_name || item.title || 'Product';
+                              const productCategory = item.product?.category || item.category;
                               const size = item.selectedSize || item.size || item.selected_size || 'Standard';
                               const colorName = item.selectedColor?.name || (typeof item.selectedColor === 'string' ? item.selectedColor : item.color || item.selected_color || item.colorName || 'Standard');
                               const colorHex = item.selectedColor?.hex || item.colorHex;
-                              const quantity = item.quantity || item.qty || 1;
+                              const quantity = item.quantity ?? item.qty ?? 1;
                               const unitPrice = Number(item.price ?? item.unitPrice ?? item.product?.price ?? 0);
                               const lineTotal = Number(item.lineTotal ?? item.total ?? (unitPrice * quantity));
-                              const image = item.product?.images?.[0] || item.product?.colors?.[0]?.image || item.image || item.imageUrl || FALLBACK_GARMENT_IMAGE;
+                              const image = item.product?.image || item.product?.images?.[0] || item.product?.colors?.[0]?.image || item.image || item.imageUrl || FALLBACK_GARMENT_IMAGE;
 
                               return (
                                 <tr key={item.id || idx} className="hover:bg-neutral-50/40 transition-colors">
@@ -992,6 +1025,11 @@ export default function MyOrdersPage() {
                                         <span className="font-bold text-neutral-900 block leading-snug">
                                           {productName}
                                         </span>
+                                        {productCategory && (
+                                          <span className="text-[10px] text-neutral-400 block font-medium">
+                                            {productCategory}
+                                          </span>
+                                        )}
                                         <span className="text-[10px] text-neutral-400 block mt-0.5">
                                           Item #{idx + 1}
                                         </span>

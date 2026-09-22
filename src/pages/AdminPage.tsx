@@ -66,19 +66,51 @@ export interface NormalizedOrderProduct {
 export function getOrderItems(order: any): any[] {
   if (!order) return [];
 
-  if (Array.isArray(order.items)) return order.items;
+  const parseCandidate = (val: any): any[] => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[]') return [];
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return parsed;
+        if (typeof parsed === 'string') {
+          try {
+            const doubleParsed = JSON.parse(parsed);
+            if (Array.isArray(doubleParsed)) return doubleParsed;
+            if (doubleParsed && typeof doubleParsed === 'object') return [doubleParsed];
+          } catch {}
+        }
+        if (parsed && typeof parsed === 'object') return [parsed];
+      } catch {}
+      return [];
+    }
+    if (typeof val === 'object') return [val];
+    return [];
+  };
 
-  if (typeof order.items === "string") {
-    try { return JSON.parse(order.items); }
-    catch {}
+  // 1. Try order.products_json first
+  const fromProductsJson = parseCandidate(order.products_json);
+  if (fromProductsJson.length > 0) {
+    return fromProductsJson;
   }
 
-  if (Array.isArray(order.products_json))
-    return order.products_json;
+  // 2. Try order.items
+  const fromItems = parseCandidate(order.items);
+  if (fromItems.length > 0) {
+    return fromItems;
+  }
 
-  if (typeof order.products_json === "string") {
-    try { return JSON.parse(order.products_json); }
-    catch {}
+  // Fallback if order has products or items_json
+  const fromProducts = parseCandidate((order as any).products);
+  if (fromProducts.length > 0) {
+    return fromProducts;
+  }
+
+  const fromItemsJson = parseCandidate((order as any).items_json);
+  if (fromItemsJson.length > 0) {
+    return fromItemsJson;
   }
 
   return [];
@@ -1247,9 +1279,9 @@ export const AdminPage: React.FC = () => {
                 </div>
               ) : (
                 filteredOrders.map((order) => {
-                  console.log("ORDER:", order);
-                  console.log("ORDER ITEMS:", getOrderItems(order));
-                  const orderItems = getOrderItems(order);
+                  const extractedProducts = getOrderItems(order);
+                  console.log("ORDER PRODUCTS:", order.products_json);
+                  console.log("PARSED PRODUCTS:", extractedProducts);
 
                   // Pre-format WhatsApp message for courier update
                   const waPaymentMethod =
@@ -1396,40 +1428,63 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                           {/* Ordered Products */}
                           <div className="pt-3 border-t border-neutral-100 space-y-2">
                             <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-500 block">
-                              Ordered Products
+                              Ordered Products ({extractedProducts.length})
                             </span>
-                            {orderItems.length === 0 ? (
+                            {extractedProducts.length === 0 ? (
                               <div className="p-2.5 rounded-lg bg-neutral-50 text-neutral-400 text-xs italic border border-neutral-200">
                                 No products found in order
                               </div>
                             ) : (
                               <div className="space-y-2">
-                                {orderItems.map((item: any, index: number) => {
-                                  const productName = item.product?.name || item.name || item.product_name || item.title || 'Product';
+                                {extractedProducts.map((item: any, index: number) => {
+                                  const productName =
+                                    item.product?.name || item.name || item.product_name || item.title || 'Product';
+                                  const productImage =
+                                    item.product?.image ||
+                                    item.product?.images?.[0] ||
+                                    item.image ||
+                                    item.imageUrl ||
+                                    FALLBACK_GARMENT_IMAGE;
+                                  const productCategory = item.product?.category || item.category;
                                   const size = item.selectedSize || item.size || item.selected_size || 'Standard';
-                                  const color = item.selectedColor?.name || (typeof item.selectedColor === 'string' ? item.selectedColor : item.color || item.selected_color || item.colorName || 'Standard');
-                                  const quantity = item.quantity || item.qty || 1;
-                                  const price = item.price ?? item.unitPrice ?? item.product?.price ?? 0;
+                                  const color =
+                                    item.selectedColor?.name ||
+                                    (typeof item.selectedColor === 'string'
+                                      ? item.selectedColor
+                                      : item.color || item.selected_color || item.colorName || 'Standard');
+                                  const quantity = item.quantity ?? item.qty ?? 1;
+                                  const price = Number(item.price ?? item.unitPrice ?? item.product?.price ?? 0);
 
                                   return (
                                     <div
                                       key={index}
-                                      className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200 text-xs space-y-0.5"
+                                      className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200 text-xs space-y-1.5"
                                     >
-                                      <div className="font-bold text-neutral-900">
-                                        {productName}
+                                      <div className="flex items-start gap-2.5">
+                                        <img
+                                          src={productImage}
+                                          alt={productName}
+                                          onError={(e) => {
+                                            (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
+                                          }}
+                                          className="w-10 h-10 rounded-md object-cover border border-neutral-200 bg-neutral-100 shrink-0"
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                          <div className="font-bold text-neutral-900 leading-snug">
+                                            {productName}
+                                          </div>
+                                          {productCategory && (
+                                            <span className="text-[10px] text-neutral-400 font-medium block">
+                                              {productCategory}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                      <div className="text-neutral-600">
-                                        Size: {size}
-                                      </div>
-                                      <div className="text-neutral-600">
-                                        Color: {color}
-                                      </div>
-                                      <div className="text-neutral-600">
-                                        Qty: {quantity}
-                                      </div>
-                                      <div className="font-semibold text-neutral-900">
-                                        PKR {Number(price).toLocaleString()}
+                                      <div className="grid grid-cols-2 gap-1 text-[11px] text-neutral-600 pt-1 border-t border-neutral-200/60">
+                                        <div>Size: <span className="font-semibold text-neutral-800">{size}</span></div>
+                                        <div>Color: <span className="font-semibold text-neutral-800">{color}</span></div>
+                                        <div>Qty: <span className="font-semibold text-neutral-800">{quantity}</span></div>
+                                        <div>Price: <span className="font-bold text-neutral-900">PKR {price.toLocaleString()}</span></div>
                                       </div>
                                     </div>
                                   );
