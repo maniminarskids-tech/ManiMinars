@@ -451,7 +451,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
           </h1>
         </div>
 
-        <form onSubmit={handleSubmitOrder}>
+        <form onSubmit={handleSubmitOrder} autoComplete="off">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Left: Checkout Steps & Payment (7 Cols) */}
             <div className="lg:col-span-7 space-y-6">
@@ -475,6 +475,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                       type="text"
                       name="fullName"
                       required
+                      autoComplete="off"
                       value={formData.fullName}
                       onChange={handleInputChange}
                       placeholder="Receiver's Full Name"
@@ -494,6 +495,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                         type="tel"
                         name="phone"
                         required
+                        autoComplete="off"
                         value={formData.phone}
                         onChange={handleInputChange}
                         placeholder="3001234567"
@@ -512,6 +514,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                       type="email"
                       name="email"
                       required
+                      autoComplete="off"
                       value={formData.email}
                       onChange={handleInputChange}
                       placeholder="name@domain.com"
@@ -526,6 +529,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                     <select
                       name="city"
                       required
+                      autoComplete="off"
                       value={formData.city}
                       onChange={handleInputChange}
                       className="w-full text-xs px-3 py-2.5 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] bg-white cursor-pointer"
@@ -548,6 +552,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                     type="text"
                     name="address"
                     required
+                    autoComplete="off"
                     value={formData.address}
                     onChange={handleInputChange}
                     placeholder="House / Flat #, Street, Sector / Area"
@@ -562,6 +567,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                   <input
                     type="text"
                     name="notes"
+                    autoComplete="off"
                     value={formData.notes}
                     onChange={handleInputChange}
                     placeholder="Optional (e.g. deliver after 2pm, ring bell twice)"
@@ -856,6 +862,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                     </label>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={paymentReference}
                       onChange={(e) => {
                         setPaymentReference(e.target.value);
