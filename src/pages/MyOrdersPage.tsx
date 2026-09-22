@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { useProducts } from '../context/ProductContext';
+import { useProducts, rowToOrder } from '../context/ProductContext';
 import { Order } from '../types';
 import {
   extractOrderProducts,
@@ -75,11 +75,31 @@ export default function MyOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { orders, isOrdersLoading, refreshOrders } = useProducts();
 
-  // Search input state
-  const queryParam = searchParams.get('q') || searchParams.get('id') || searchParams.get('phone') || '';
-  const [searchInput, setSearchInput] = useState(queryParam);
-  const [activeSearchQuery, setActiveSearchQuery] = useState(queryParam);
+  // Resolve initial customer phone lookup key (from URL or persistent storage)
+  const getInitialPhone = () => {
+    try {
+      const urlQuery = searchParams.get('phone') || searchParams.get('q') || searchParams.get('id');
+      if (urlQuery) return urlQuery.trim();
+      return (
+        localStorage.getItem('mm_customer_phone') ||
+        localStorage.getItem('mani_minars_customer_phone') ||
+        localStorage.getItem('mani_minars_last_order_query') ||
+        ''
+      );
+    } catch {
+      return '';
+    }
+  };
+
+  const initialLookup = getInitialPhone();
+  const [customerPhone, setCustomerPhone] = useState<string>(initialLookup);
+  const [searchInput, setSearchInput] = useState<string>(initialLookup);
+  const [activeSearchQuery, setActiveSearchQuery] = useState<string>(initialLookup);
   const [searchMode, setSearchMode] = useState<'all' | 'phone' | 'order_id'>('all');
+
+  // Supabase direct orders state
+  const [supabaseOrders, setSupabaseOrders] = useState<Order[]>([]);
+  const [isLoadingDirect, setIsLoadingDirect] = useState<boolean>(true);
 
   // Interactive UI states
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
@@ -87,26 +107,70 @@ export default function MyOrdersPage() {
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
   const [selectedOrderTab, setSelectedOrderTab] = useState<string | null>(null);
 
+  // 1. MyOrdersPage must load orders directly from Supabase
+  const loadOrdersDirectlyFromSupabase = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      const supabase = getSupabase();
+      if (!supabase) {
+        console.warn('Supabase client not initialized');
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching orders directly from Supabase:', error);
+        return;
+      }
+
+      if (data && Array.isArray(data)) {
+        const mapped = data.map(rowToOrder);
+        setSupabaseOrders(mapped);
+      }
+    } catch (err) {
+      console.error('Exception fetching orders from Supabase:', err);
+    } finally {
+      setIsRefreshing(false);
+      setIsLoadingDirect(false);
+    }
+  }, []);
+
   // Sync state if URL query param changes
   useEffect(() => {
-    if (queryParam && queryParam !== activeSearchQuery) {
-      setSearchInput(queryParam);
-      setActiveSearchQuery(queryParam);
+    const urlQuery = searchParams.get('phone') || searchParams.get('q') || searchParams.get('id');
+    if (urlQuery && urlQuery !== customerPhone) {
+      const trimmed = urlQuery.trim();
+      setSearchInput(trimmed);
+      setActiveSearchQuery(trimmed);
+      setCustomerPhone(trimmed);
+      try {
+        localStorage.setItem('mm_customer_phone', trimmed);
+        localStorage.setItem('mani_minars_customer_phone', trimmed);
+      } catch {
+        // ignore
+      }
     }
-  }, [queryParam]);
+  }, [searchParams, customerPhone]);
 
-  // Real-time synchronization directly with Supabase for instant admin update propagation
+  // Load orders directly on mount and listen to realtime status updates
   useEffect(() => {
+    loadOrdersDirectlyFromSupabase();
+
     const supabase = getSupabase();
     if (!supabase) return;
 
     const channel = supabase
-      .channel('my-orders-realtime-tracker')
+      .channel('my-orders-supabase-direct-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          // Immediately re-fetch orders so the customer sees the updated status
+        (payload) => {
+          console.log('Realtime order update event received:', payload);
+          loadOrdersDirectlyFromSupabase();
           refreshOrders();
         }
       )
@@ -115,13 +179,13 @@ export default function MyOrdersPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshOrders]);
+  }, [loadOrdersDirectlyFromSupabase, refreshOrders]);
 
   // Manual refresh handler
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await refreshOrders();
+      await Promise.all([loadOrdersDirectlyFromSupabase(), refreshOrders()]);
     } finally {
       setTimeout(() => setIsRefreshing(false), 500);
     }
@@ -136,15 +200,18 @@ export default function MyOrdersPage() {
     }
   };
 
-  // Submit search
+  // Submit phone lookup
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = searchInput.trim();
+    setCustomerPhone(trimmed);
     setActiveSearchQuery(trimmed);
     if (trimmed) {
-      setSearchParams({ q: trimmed });
-      // Save recent query to local storage
+      setSearchParams({ phone: trimmed });
+      // 5. Orders must remain visible after refresh and browser restart
       try {
+        localStorage.setItem('mm_customer_phone', trimmed);
+        localStorage.setItem('mani_minars_customer_phone', trimmed);
         localStorage.setItem('mani_minars_last_order_query', trimmed);
       } catch {
         // ignore
@@ -152,62 +219,49 @@ export default function MyOrdersPage() {
     } else {
       setSearchParams({});
     }
+    loadOrdersDirectlyFromSupabase();
   };
 
-  // Pre-load last search query if no search query provided
-  useEffect(() => {
-    if (!activeSearchQuery) {
-      try {
-        const lastQuery = localStorage.getItem('mani_minars_last_order_query');
-        if (lastQuery && !searchInput) {
-          setSearchInput(lastQuery);
-          setActiveSearchQuery(lastQuery);
-        }
-      } catch {
-        // ignore
-      }
-    }
-  }, []);
-
-  // Filter orders based on customer search query (Phone or Order ID)
+  // 3. Fetch and filter all matching orders from the orders table
+  // 7. Do not remove orders until status is Delivered (all orders matching lookup are shown)
   const filteredOrders = useMemo(() => {
-    if (!activeSearchQuery.trim()) {
+    const lookup = (customerPhone || activeSearchQuery).trim();
+    if (!lookup) {
       return [];
     }
 
-    const rawQuery = activeSearchQuery.trim();
-    const queryDigits = normalizePhoneNumber(rawQuery);
-    const queryLower = rawQuery.toLowerCase();
+    // Direct Supabase orders are primary source of truth, fallback to context orders
+    const sourceOrders = supabaseOrders.length > 0 ? supabaseOrders : orders;
+    const queryDigits = normalizePhoneNumber(lookup);
+    const queryLower = lookup.toLowerCase();
 
-    return orders.filter((order) => {
-      const orderId = (order.id || order.order_id || '').toLowerCase();
-      const customerPhone = normalizePhoneNumber(order.customer?.phone);
-      const rawCustomerPhone = (order.customer?.phone || '').toLowerCase();
-      const customerName = (order.customer?.fullName || '').toLowerCase();
+    return sourceOrders.filter((order) => {
+      const orderId = (order.id || (order as any).order_id || '').toLowerCase();
+      const rawCustomerPhone = (order.customer?.phone || (order as any).phone || '').toLowerCase();
+      const customerPhoneDigits = normalizePhoneNumber(rawCustomerPhone);
+      const customerName = (order.customer?.fullName || (order as any).customer_name || '').toLowerCase();
 
-      // Check if user specifically requested phone mode
-      if (searchMode === 'phone') {
-        if (queryDigits.length >= 4 && customerPhone.includes(queryDigits)) return true;
-        if (rawCustomerPhone.includes(queryLower)) return true;
-        return false;
+      // 1. Order ID match
+      if (orderId.includes(queryLower)) return true;
+
+      // 2. Phone number match (normalized Pakistani digits)
+      if (queryDigits.length >= 4) {
+        if (customerPhoneDigits.includes(queryDigits)) return true;
+        if (queryDigits.includes(customerPhoneDigits) && customerPhoneDigits.length >= 7) return true;
+        const qEnd = queryDigits.slice(-7);
+        const cEnd = customerPhoneDigits.slice(-7);
+        if (qEnd.length >= 7 && cEnd.length >= 7 && qEnd === cEnd) return true;
       }
 
-      // Check if user specifically requested order_id mode
-      if (searchMode === 'order_id') {
-        if (orderId.includes(queryLower)) return true;
-        return false;
-      }
+      // 3. Raw phone substring match
+      if (rawCustomerPhone.includes(queryLower)) return true;
 
-      // 'all' mode: Match either Order ID OR Phone Number (or customer name fallback)
-      const matchesOrderId = orderId.includes(queryLower);
-      const matchesPhone =
-        (queryDigits.length >= 4 && customerPhone.includes(queryDigits)) ||
-        rawCustomerPhone.includes(queryLower);
-      const matchesName = queryLower.length >= 3 && customerName.includes(queryLower);
+      // 4. Customer name match
+      if (queryLower.length >= 3 && customerName.includes(queryLower)) return true;
 
-      return matchesOrderId || matchesPhone || matchesName;
+      return false;
     });
-  }, [orders, activeSearchQuery, searchMode]);
+  }, [supabaseOrders, orders, customerPhone, activeSearchQuery]);
 
   // Determine timeline step progression based on normalized status
   const getStepStatus = (orderStatus: string, stepKey: string) => {
@@ -501,15 +555,15 @@ export default function MyOrdersPage() {
         </section>
 
         {/* Search Results / Order Tracking Content */}
-        {activeSearchQuery.trim() === '' ? (
+        {activeSearchQuery.trim() === '' && customerPhone.trim() === '' ? (
           /* Empty Search Initial State */
           <div className="bg-white rounded-2xl border border-neutral-200 p-8 sm:p-12 text-center max-w-xl mx-auto space-y-4">
             <div className="w-16 h-16 rounded-full bg-orange-50 text-[#E84D3D] flex items-center justify-center mx-auto">
               <Package className="w-8 h-8" />
             </div>
-            <h3 className="font-bold text-lg text-neutral-900">Track Your Mani Minars Order</h3>
+            <h3 className="font-bold text-lg text-neutral-900">Track Your Mani Minars Orders</h3>
             <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-              Enter your <strong>Phone Number</strong> (e.g., 0300 1234567) or your <strong>Order ID</strong> (e.g., MM-94821) in the search box above to view real-time verification and parcel progress.
+              Enter your <strong>Phone Number</strong> (e.g., 0300 1234567) in the box above to view all matching orders, real-time verification, and parcel progress directly from Supabase.
             </p>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <a
@@ -531,23 +585,31 @@ export default function MyOrdersPage() {
             </div>
             <h3 className="font-bold text-lg text-neutral-900">No Orders Found</h3>
             <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-              We couldn't find any orders matching <strong>"{activeSearchQuery}"</strong>. Please verify the mobile number or Order ID provided during checkout.
+              We couldn't find any orders matching <strong>"{customerPhone || activeSearchQuery}"</strong>. Please verify the mobile number provided during checkout.
             </p>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={() => {
                   setSearchInput('');
+                  setCustomerPhone('');
                   setActiveSearchQuery('');
                   setSearchParams({});
+                  try {
+                    localStorage.removeItem('mm_customer_phone');
+                    localStorage.removeItem('mani_minars_customer_phone');
+                    localStorage.removeItem('mani_minars_last_order_query');
+                  } catch {
+                    // ignore
+                  }
                 }}
                 className="px-4 py-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-semibold transition-colors cursor-pointer"
               >
                 Clear Search
               </button>
               <a
-                href={`https://wa.me/923046466815?text=Assalam-o-Alaikum%20Mani%20Minars!%20I%20could%20not%20find%20my%20order%20for%20query:%20${encodeURIComponent(
-                  activeSearchQuery
+                href={`https://wa.me/923046466815?text=Assalam-o-Alaikum%20Mani%20Minars!%20I%20could%20not%20find%20my%20order%20for%20phone:%20${encodeURIComponent(
+                  customerPhone || activeSearchQuery
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -561,11 +623,20 @@ export default function MyOrdersPage() {
         ) : (
           /* Found Orders List */
           <div className="space-y-8">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <p className="text-xs sm:text-sm font-semibold text-neutral-600">
                 Found {filteredOrders.length} {filteredOrders.length === 1 ? 'order' : 'orders'} for{' '}
-                <strong className="text-neutral-900">"{activeSearchQuery}"</strong>
+                <strong className="text-neutral-900 font-mono">"{customerPhone || activeSearchQuery}"</strong>
               </p>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>Realtime Supabase Sync</span>
+                </span>
+                <span className="text-[11px] text-neutral-500 hidden sm:inline">
+                  (Saved across browser restarts)
+                </span>
+              </div>
             </div>
 
             {filteredOrders.map((order) => {

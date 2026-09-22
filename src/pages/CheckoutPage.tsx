@@ -32,13 +32,22 @@ export const CheckoutPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    fullName: 'Fatima Malik',
-    phone: '3046466815',
-    email: 'maniminarskids@gmail.com',
-    city: 'Lahore',
-    address: 'House 42, Block D, Phase 5, DHA',
-    notes: 'Please call before delivery.',
+    fullName: '',
+    phone: '',
+    email: '',
+    city: '',
+    address: '',
+    notes: '',
   });
+
+  const [submittedCustomer, setSubmittedCustomer] = useState<{
+    fullName: string;
+    phone: string;
+    email: string;
+    city: string;
+    address: string;
+    notes?: string;
+  } | null>(null);
 
   // Allowed Payment Methods ONLY: 'bank_transfer' or 'raast'
   const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'raast'>('bank_transfer');
@@ -116,6 +125,12 @@ export const CheckoutPage: React.FC = () => {
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Validate customer form fields
+    if (!formData.fullName.trim() || !formData.phone.trim() || !formData.address.trim() || !formData.city.trim()) {
+      setPaymentError('Please fill in all required customer details (Full Name, Phone Number, City, and Delivery Address).');
+      return;
+    }
+
     // Strict validation: Require payment proof or reference number
     const trimmedRef = paymentReference.trim();
     if (!trimmedRef && !paymentScreenshot) {
@@ -138,17 +153,37 @@ export const CheckoutPage: React.FC = () => {
     setSubmittedReference(trimmedRef);
     setSubmittedScreenshot(paymentScreenshot);
 
+    const snapshotCustomer = {
+      fullName: formData.fullName.trim(),
+      phone: formData.phone.trim(),
+      email: formData.email.trim(),
+      city: formData.city.trim(),
+      address: formData.address.trim(),
+      notes: formData.notes.trim() || undefined,
+    };
+    setSubmittedCustomer(snapshotCustomer);
+
+    // Save phone for My Orders lookup so order persists across refresh & browser restart
+    if (snapshotCustomer.phone) {
+      try {
+        localStorage.setItem('mm_customer_phone', snapshotCustomer.phone);
+        localStorage.setItem('mani_minars_customer_phone', snapshotCustomer.phone);
+      } catch {
+        // ignore
+      }
+    }
+
     // Save order to Supabase immediately with payment reference & screenshot
     const newOrder: Order = {
       id: generatedId,
       createdAt: new Date().toISOString(),
       customer: {
-        fullName: formData.fullName,
-        phone: `+92${formData.phone.replace(/^0+/, '')}`,
-        email: formData.email,
-        city: formData.city,
-        address: formData.address,
-        notes: formData.notes,
+        fullName: snapshotCustomer.fullName,
+        phone: `+92${snapshotCustomer.phone.replace(/^0+/, '')}`,
+        email: snapshotCustomer.email,
+        city: snapshotCustomer.city,
+        address: snapshotCustomer.address,
+        notes: snapshotCustomer.notes,
       },
       items: [...cart],
       subtotal,
@@ -164,6 +199,19 @@ export const CheckoutPage: React.FC = () => {
       status: 'Pending Verification',
       courier: deliverySettings.courierName,
     };
+
+    // FIX #2 Requirement 7: After successful order placement, clear all fields
+    setFormData({
+      fullName: '',
+      phone: '',
+      email: '',
+      city: '',
+      address: '',
+      notes: '',
+    });
+    setPaymentReference('');
+    setPaymentScreenshot(null);
+    setScreenshotFileName('');
 
     // Save immediately to Supabase and local cache
     try {
@@ -202,14 +250,22 @@ export const CheckoutPage: React.FC = () => {
         ? 'Meezan Bank Transfer (A/C: 02240104372309)'
         : 'Raast Payment (ID: 03046466815)';
 
+    const customerDisplayName = submittedCustomer?.fullName || 'Valued Customer';
+    const customerDisplayPhone = submittedCustomer?.phone
+      ? `+92${submittedCustomer.phone.replace(/^0+/, '')}`
+      : '';
+    const customerDisplayAddress = submittedCustomer
+      ? `${submittedCustomer.address}, ${submittedCustomer.city}`
+      : '';
+
     const whatsappMessage = `Assalam-o-Alaikum Mani Minars! 👋
 I have placed Order #${orderId} on your store:
 
 💰 *Total Amount:* PKR ${total.toLocaleString()}
 💳 *Payment Method:* ${paymentMethodLabel}
-${submittedReference ? `🔖 *Payment Reference / TID:* ${submittedReference}\n` : ''}👤 *Customer:* ${formData.fullName}
-📞 *Phone:* +92${formData.phone.replace(/^0+/, '')}
-📍 *Delivery Address:* ${formData.address}, ${formData.city}
+${submittedReference ? `🔖 *Payment Reference / TID:* ${submittedReference}\n` : ''}👤 *Customer:* ${customerDisplayName}
+📞 *Phone:* ${customerDisplayPhone}
+📍 *Delivery Address:* ${customerDisplayAddress}
 
 I am attaching my payment proof screenshot for verification. Please confirm my order dispatch. Shukriya!`;
 
@@ -312,7 +368,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
               <div className="flex justify-between">
                 <span className="text-neutral-500">Delivery Address:</span>
                 <span className="font-semibold text-neutral-800 text-right max-w-xs truncate">
-                  {formData.address}, {formData.city}
+                  {submittedCustomer?.address || ''}, {submittedCustomer?.city || ''}
                 </span>
               </div>
               <div className="flex justify-between border-t border-neutral-200 pt-2.5 text-sm font-bold text-neutral-900">
@@ -336,7 +392,10 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
             {/* Track Order Live Button */}
             <button
               type="button"
-              onClick={() => navigate(`/my-orders?q=${orderId}`)}
+              onClick={() => {
+                const phoneQuery = submittedCustomer?.phone ? `&phone=${encodeURIComponent(submittedCustomer.phone)}` : '';
+                navigate(`/my-orders?q=${orderId}${phoneQuery}`);
+              }}
               className="w-full py-3.5 px-4 rounded-xl bg-neutral-900 hover:bg-black text-white text-xs sm:text-sm font-bold uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2 mb-5 cursor-pointer"
             >
               <Package className="w-4 h-4 text-[#E84D3D]" />
@@ -471,6 +530,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                       onChange={handleInputChange}
                       className="w-full text-xs px-3 py-2.5 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] bg-white cursor-pointer"
                     >
+                      <option value="">Select City (Pakistan)</option>
                       {pakistanCities.map((city) => (
                         <option key={city} value={city}>
                           {city}
