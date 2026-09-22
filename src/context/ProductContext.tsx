@@ -541,16 +541,33 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
       const stored = localStorage.getItem('mani_minars_orders_v1');
-      if (stored) return JSON.parse(stored);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          // Clear legacy cache format automatically if items or products_json are empty
+          const hasEmptyLegacyOrders = parsed.some(
+            (o: any) =>
+              (!o.items || o.items.length === 0) &&
+              (!o.products_json || o.products_json.length === 0)
+          );
+          if (hasEmptyLegacyOrders) {
+            console.info('Legacy order cache format detected. Purging old cache...');
+            localStorage.removeItem('mani_minars_orders_v1');
+            return INITIAL_ORDERS;
+          }
+          return parsed;
+        }
+      }
     } catch (e) {
       console.error('Error loading orders from storage', e);
+      localStorage.removeItem('mani_minars_orders_v1');
     }
     return INITIAL_ORDERS;
   });
 
   const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(false);
 
-  // Fetch orders from Supabase orders table
+  // Fetch orders from Supabase orders table (Supabase data always overrides localStorage cache)
   const refreshOrders = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) return;

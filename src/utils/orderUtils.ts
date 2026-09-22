@@ -3,6 +3,34 @@ import { Order, OrderStatus } from '../types';
 export const FALLBACK_GARMENT_IMAGE =
   'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=800&q=80';
 
+/**
+ * Reusable helper to safely extract ordered products from order object,
+ * handling products_json, items, and stringified JSON.
+ */
+export const extractOrderProducts = (order: any): any[] => {
+  if (!order) return [];
+  let products = order.products_json || order.items || [];
+
+  if (typeof products === 'string') {
+    try {
+      products = JSON.parse(products);
+    } catch {
+      products = [];
+    }
+  }
+
+  // Handle double-stringified JSON if present
+  if (typeof products === 'string') {
+    try {
+      products = JSON.parse(products);
+    } catch {
+      products = [];
+    }
+  }
+
+  return Array.isArray(products) ? products : [];
+};
+
 export interface NormalizedOrderProduct {
   id: string;
   name: string;
@@ -65,9 +93,9 @@ export function normalizePhoneNumber(phone?: string): string {
 }
 
 /**
- * Extracts and normalizes ordered products from either `products_json` or `items` field.
+ * Extracts ordered products from either `products_json` or `items` field.
  */
-export function extractOrderProducts(order: Order): NormalizedOrderProduct[] {
+export function normalizeOrderProducts(order: Order): NormalizedOrderProduct[] {
   let rawList: any[] = [];
 
   if (Array.isArray(order.items) && order.items.length > 0) {

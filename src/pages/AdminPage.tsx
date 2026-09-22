@@ -63,194 +63,22 @@ export interface NormalizedOrderProduct {
   lineTotal: number;
 }
 
-export function getOrderItems(order: any): any[] {
+export const extractOrderProducts = (order: any): any[] => {
   if (!order) return [];
-  try {
-    if (Array.isArray(order.items) && order.items.length)
-      return order.items;
+  let products = order.products_json || order.items || [];
 
-    if (typeof order.items === "string") {
-      const parsed = JSON.parse(order.items);
-      if (Array.isArray(parsed) && parsed.length) return parsed;
-      if (parsed && typeof parsed === 'object') return [parsed];
-    }
-
-    if (Array.isArray(order.products_json) && order.products_json.length)
-      return order.products_json;
-
-    if (typeof order.products_json === "string") {
-      const parsed = JSON.parse(order.products_json);
-      if (Array.isArray(parsed) && parsed.length) return parsed;
-      if (parsed && typeof parsed === 'object') return [parsed];
-    }
-
-    if (typeof order.items === "string") {
-      try {
-        const p = JSON.parse(order.items);
-        if (Array.isArray(p)) return p;
-      } catch {}
-    }
-
-    if (typeof order.products_json === "string") {
-      try {
-        const p = JSON.parse(order.products_json);
-        if (Array.isArray(p)) return p;
-      } catch {}
-    }
-
-    if (Array.isArray(order.items)) return order.items;
-    if (Array.isArray(order.products_json)) return order.products_json;
-
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Normalizes ordered products from products_json or items field.
- * Handles nested product objects, flattened structures, and various naming conventions.
- */
-export function extractOrderProducts(order: Order): NormalizedOrderProduct[] {
-  let rawList: any[] = [];
-
-  if (Array.isArray(order.items) && order.items.length > 0) {
-    rawList = order.items;
-  } else if (Array.isArray(order.products_json) && order.products_json.length > 0) {
-    rawList = order.products_json;
-  } else if (typeof order.products_json === 'string') {
+  if (typeof products === "string") {
     try {
-      const parsed = JSON.parse(order.products_json);
-      if (Array.isArray(parsed)) rawList = parsed;
-      else if (parsed && typeof parsed === 'object') rawList = [parsed];
+      products = JSON.parse(products);
     } catch {
-      rawList = [];
-    }
-  } else if (typeof (order as any).items === 'string') {
-    try {
-      const parsed = JSON.parse((order as any).items);
-      if (Array.isArray(parsed)) rawList = parsed;
-      else if (parsed && typeof parsed === 'object') rawList = [parsed];
-    } catch {
-      rawList = [];
+      products = [];
     }
   }
 
-  // If still empty but order itself has product fields (flattened single order)
-  if (rawList.length === 0 && ((order as any).product_name || (order as any).productName)) {
-    rawList = [order];
-  }
+  return Array.isArray(products) ? products : [];
+};
 
-  return rawList.map((item, index) => {
-    if (!item || typeof item !== 'object') {
-      return {
-        id: `item-${index}`,
-        name: String(item || 'Ordered Product'),
-        image: FALLBACK_GARMENT_IMAGE,
-        size: 'Standard',
-        colorName: 'Standard',
-        colorHex: undefined,
-        quantity: 1,
-        unitPrice: 0,
-        lineTotal: 0,
-      };
-    }
-
-    // 1. Product Name
-    const name =
-      item.product?.name ||
-      item.name ||
-      item.product_name ||
-      item.productName ||
-      item.title ||
-      item.item_name ||
-      `Product #${index + 1}`;
-
-    // 2. Product Image
-    let image =
-      item.product?.images?.[0] ||
-      item.product?.image ||
-      item.image ||
-      item.product_image ||
-      item.productImage ||
-      item.selectedColor?.image ||
-      item.selected_color?.image ||
-      (Array.isArray(item.images) && item.images[0]) ||
-      FALLBACK_GARMENT_IMAGE;
-
-    if (!image || typeof image !== 'string' || image.trim() === '') {
-      image = FALLBACK_GARMENT_IMAGE;
-    }
-
-    // 3. Selected Size
-    const size =
-      item.selectedSize ||
-      item.selected_size ||
-      item.size ||
-      item.selected_size_name ||
-      item.variant?.size ||
-      'Standard';
-
-    // 4. Selected Color
-    let colorName = 'Standard';
-    let colorHex: string | undefined = undefined;
-
-    if (item.selectedColor) {
-      if (typeof item.selectedColor === 'string') {
-        colorName = item.selectedColor;
-      } else if (typeof item.selectedColor === 'object') {
-        colorName = item.selectedColor.name || item.selectedColor.color || item.selectedColor.title || 'Standard';
-        colorHex = item.selectedColor.hex;
-      }
-    } else if (item.selected_color) {
-      if (typeof item.selected_color === 'string') {
-        colorName = item.selected_color;
-      } else if (typeof item.selected_color === 'object') {
-        colorName = item.selected_color.name || 'Standard';
-        colorHex = item.selected_color.hex;
-      }
-    } else if (item.color) {
-      if (typeof item.color === 'string') {
-        colorName = item.color;
-      } else if (typeof item.color === 'object') {
-        colorName = item.color.name || item.color.title || 'Standard';
-        colorHex = item.color.hex;
-      }
-    }
-
-    // 5. Quantity
-    const quantity = Math.max(1, Number(item.quantity ?? item.qty ?? item.count ?? item.amount ?? 1) || 1);
-
-    // 6. Unit Price
-    let unitPrice = Number(
-      item.unitPrice ??
-      item.unit_price ??
-      item.price ??
-      item.product?.price ??
-      0
-    );
-
-    const rawLineTotal = Number(item.lineTotal ?? item.line_total ?? item.total);
-    if ((!unitPrice || unitPrice === 0) && rawLineTotal > 0) {
-      unitPrice = Math.round(rawLineTotal / quantity);
-    }
-
-    // 7. Line Total
-    const lineTotal = rawLineTotal > 0 ? rawLineTotal : unitPrice * quantity;
-
-    return {
-      id: String(item.id || item.productId || item.product_id || item.product?.id || `item-${index}`),
-      name,
-      image,
-      size,
-      colorName,
-      colorHex,
-      quantity,
-      unitPrice,
-      lineTotal,
-    };
-  });
-}
+export const getOrderItems = extractOrderProducts;
 
 /**
  * Automatically compress and scale uploaded garment images so they load instantly
@@ -1270,48 +1098,7 @@ export const AdminPage: React.FC = () => {
                 </div>
               ) : (
                 filteredOrders.map((order) => {
-                  const orderProducts = (() => {
-                    try {
-                      if (Array.isArray(order.items) && order.items.length)
-                        return order.items;
-
-                      if (typeof order.items === "string") {
-                        const parsed = JSON.parse(order.items);
-                        if (Array.isArray(parsed) && parsed.length) return parsed;
-                        if (parsed && typeof parsed === 'object') return [parsed];
-                      }
-
-                      if (Array.isArray(order.products_json) && order.products_json.length)
-                        return order.products_json;
-
-                      if (typeof order.products_json === "string") {
-                        const parsed = JSON.parse(order.products_json);
-                        if (Array.isArray(parsed) && parsed.length) return parsed;
-                        if (parsed && typeof parsed === 'object') return [parsed];
-                      }
-
-                      if (typeof order.items === "string") {
-                        try {
-                          const p = JSON.parse(order.items);
-                          if (Array.isArray(p)) return p;
-                        } catch {}
-                      }
-
-                      if (typeof order.products_json === "string") {
-                        try {
-                          const p = JSON.parse(order.products_json);
-                          if (Array.isArray(p)) return p;
-                        } catch {}
-                      }
-
-                      if (Array.isArray(order.items)) return order.items;
-                      if (Array.isArray(order.products_json)) return order.products_json;
-
-                      return [];
-                    } catch {
-                      return [];
-                    }
-                  })();
+                  const orderProducts = extractOrderProducts(order);
 
                   console.log("ORDER ITEMS:", order.items);
                   console.log("ORDER PRODUCTS_JSON:", order.products_json);

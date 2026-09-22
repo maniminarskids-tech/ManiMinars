@@ -28,7 +28,6 @@ import Footer from '../components/Footer';
 import { useProducts, rowToOrder } from '../context/ProductContext';
 import { Order } from '../types';
 import {
-  extractOrderProducts,
   normalizeOrderStatus,
   normalizePhoneNumber,
   formatOrderDate,
@@ -37,49 +36,22 @@ import {
 } from '../utils/orderUtils';
 import { getSupabase } from '../services/supabase';
 
-export function getOrderItems(order: any): any[] {
+export const extractOrderProducts = (order: any): any[] => {
   if (!order) return [];
-  try {
-    if (Array.isArray(order.items) && order.items.length)
-      return order.items;
+  let products = order.products_json || order.items || [];
 
-    if (typeof order.items === "string") {
-      const parsed = JSON.parse(order.items);
-      if (Array.isArray(parsed) && parsed.length) return parsed;
-      if (parsed && typeof parsed === 'object') return [parsed];
+  if (typeof products === "string") {
+    try {
+      products = JSON.parse(products);
+    } catch {
+      products = [];
     }
-
-    if (Array.isArray(order.products_json) && order.products_json.length)
-      return order.products_json;
-
-    if (typeof order.products_json === "string") {
-      const parsed = JSON.parse(order.products_json);
-      if (Array.isArray(parsed) && parsed.length) return parsed;
-      if (parsed && typeof parsed === 'object') return [parsed];
-    }
-
-    if (typeof order.items === "string") {
-      try {
-        const p = JSON.parse(order.items);
-        if (Array.isArray(p)) return p;
-      } catch {}
-    }
-
-    if (typeof order.products_json === "string") {
-      try {
-        const p = JSON.parse(order.products_json);
-        if (Array.isArray(p)) return p;
-      } catch {}
-    }
-
-    if (Array.isArray(order.items)) return order.items;
-    if (Array.isArray(order.products_json)) return order.products_json;
-
-    return [];
-  } catch {
-    return [];
   }
-}
+
+  return Array.isArray(products) ? products : [];
+};
+
+export const getOrderItems = extractOrderProducts;
 
 // Visual timeline steps
 const TIMELINE_STEPS = [
@@ -684,48 +656,7 @@ export default function MyOrdersPage() {
             </div>
 
             {filteredOrders.map((order) => {
-              const orderProducts = (() => {
-                try {
-                  if (Array.isArray(order.items) && order.items.length)
-                    return order.items;
-
-                  if (typeof order.items === "string") {
-                    const parsed = JSON.parse(order.items);
-                    if (Array.isArray(parsed) && parsed.length) return parsed;
-                    if (parsed && typeof parsed === 'object') return [parsed];
-                  }
-
-                  if (Array.isArray(order.products_json) && order.products_json.length)
-                    return order.products_json;
-
-                  if (typeof order.products_json === "string") {
-                    const parsed = JSON.parse(order.products_json);
-                    if (Array.isArray(parsed) && parsed.length) return parsed;
-                    if (parsed && typeof parsed === 'object') return [parsed];
-                  }
-
-                  if (typeof order.items === "string") {
-                    try {
-                      const p = JSON.parse(order.items);
-                      if (Array.isArray(p)) return p;
-                    } catch {}
-                  }
-
-                  if (typeof order.products_json === "string") {
-                    try {
-                      const p = JSON.parse(order.products_json);
-                      if (Array.isArray(p)) return p;
-                    } catch {}
-                  }
-
-                  if (Array.isArray(order.items)) return order.items;
-                  if (Array.isArray(order.products_json)) return order.products_json;
-
-                  return [];
-                } catch {
-                  return [];
-                }
-              })();
+              const orderProducts = extractOrderProducts(order);
 
               console.log("ORDER ITEMS:", order.items);
               console.log("ORDER PRODUCTS_JSON:", order.products_json);
