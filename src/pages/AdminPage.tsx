@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useProducts, FALLBACK_GARMENT_IMAGE } from '../context/ProductContext';
 import { Product, Order, OrderStatus, Category, AgeGroup, Coupon } from '../types';
@@ -281,6 +281,12 @@ export const AdminPage: React.FC = () => {
     isCloudConnected,
     refreshProducts,
   } = useProducts();
+
+  useEffect(() => {
+    refreshOrders();
+  }, [refreshOrders]);
+
+  console.log("ADMIN ORDERS:", orders);
 
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -1095,6 +1101,9 @@ export const AdminPage: React.FC = () => {
 
             {/* Filter and search bar */}
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-neutral-200/80 shadow-2xs space-y-3">
+              <div className="text-xs font-semibold text-neutral-500">
+                Total Orders: {orders.length}
+              </div>
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="relative w-full sm:w-96">
                   <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
@@ -1217,6 +1226,20 @@ export const AdminPage: React.FC = () => {
                 </div>
               ) : (
                 filteredOrders.map((order) => {
+                  const rawItems: any = order.items;
+                  const rawProductsJson: any = order.products_json;
+
+                  const orderProducts: any[] =
+                    Array.isArray(rawItems) && rawItems.length > 0
+                      ? rawItems
+                      : Array.isArray(rawProductsJson)
+                      ? rawProductsJson
+                      : typeof rawItems === 'string' && rawItems.trim().startsWith('[')
+                      ? (() => { try { return JSON.parse(rawItems); } catch { return []; } })()
+                      : typeof rawProductsJson === 'string' && rawProductsJson.trim().startsWith('[')
+                      ? (() => { try { return JSON.parse(rawProductsJson); } catch { return []; } })()
+                      : [];
+
                   // Pre-format WhatsApp message for courier update
                   const waPaymentMethod =
                     order.paymentMethod === 'bank_transfer'
@@ -1356,6 +1379,43 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                               <p className="mt-1 text-neutral-600 bg-neutral-50 p-2 rounded-lg border border-neutral-200 text-[11px]">
                                 <span className="font-semibold">Note:</span> {order.customer.notes}
                               </p>
+                            )}
+                          </div>
+
+                          {/* Ordered Products */}
+                          <div className="pt-3 border-t border-neutral-100 space-y-2">
+                            <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-500 block">
+                              Ordered Products
+                            </span>
+                            {orderProducts.length === 0 ? (
+                              <div className="p-2.5 rounded-lg bg-neutral-50 text-neutral-400 text-xs italic border border-neutral-200">
+                                No products found in order
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {orderProducts.map((item: any, index: number) => (
+                                  <div
+                                    key={index}
+                                    className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200 text-xs space-y-0.5"
+                                  >
+                                    <div className="font-bold text-neutral-900">
+                                      {item.product?.name || item.name}
+                                    </div>
+                                    <div className="text-neutral-600">
+                                      Size: {item.selectedSize || item.size || 'Standard'}
+                                    </div>
+                                    <div className="text-neutral-600">
+                                      Color: {item.selectedColor?.name || (typeof item.selectedColor === 'string' ? item.selectedColor : item.color) || 'Standard'}
+                                    </div>
+                                    <div className="text-neutral-600">
+                                      Qty: {item.quantity || 1}
+                                    </div>
+                                    <div className="font-semibold text-neutral-900">
+                                      PKR {item.price ?? item.product?.price ?? 0}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             )}
                           </div>
                         </div>

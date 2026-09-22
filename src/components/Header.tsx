@@ -34,9 +34,9 @@ export const Header: React.FC<HeaderProps> = () => {
     { name: 'Shop Kids', path: '/kids', age: '0–10Y', accent: '#E84D3D' },
     { name: 'Shop Juniors', path: '/juniors', age: '11–16Y', accent: '#F5BE38' },
     { name: 'New Arrivals', path: '/new-arrivals' },
-    { name: 'Sale', path: '/sale', isSale: true },
-    { name: 'My Orders', path: '/my-orders' },
     { name: 'About', path: '/about' },
+    { name: 'My Orders', path: '/my-orders' },
+    { name: 'Sale', path: '/sale', isSale: true },
   ];
 
   return (
@@ -214,11 +214,11 @@ export const Header: React.FC<HeaderProps> = () => {
                 <ArrowRight className="w-4 h-4 text-neutral-400" />
               </Link>
               <Link
-                to="/sale"
-                className="flex items-center justify-between p-3 rounded-xl hover:bg-red-50 text-[#E84D3D] font-semibold"
+                to="/about"
+                className="flex items-center justify-between p-3 rounded-xl hover:bg-neutral-50 text-neutral-800 font-medium"
               >
-                <span>Sale & Special Offers</span>
-                <span className="text-xs bg-[#E84D3D] text-white px-2 py-0.5 rounded">Up to 40%</span>
+                <span>About Mani Minars</span>
+                <ArrowRight className="w-4 h-4 text-neutral-400" />
               </Link>
               <Link
                 to="/my-orders"
@@ -231,11 +231,11 @@ export const Header: React.FC<HeaderProps> = () => {
                 <ArrowRight className="w-4 h-4 text-[#E84D3D]" />
               </Link>
               <Link
-                to="/about"
-                className="flex items-center justify-between p-3 rounded-xl hover:bg-neutral-50 text-neutral-800 font-medium"
+                to="/sale"
+                className="flex items-center justify-between p-3 rounded-xl hover:bg-red-50 text-[#E84D3D] font-semibold"
               >
-                <span>About Mani Minars</span>
-                <ArrowRight className="w-4 h-4 text-neutral-400" />
+                <span>Sale & Special Offers</span>
+                <span className="text-xs bg-[#E84D3D] text-white px-2 py-0.5 rounded">Up to 40%</span>
               </Link>
               <Link
                 to="/contact"
