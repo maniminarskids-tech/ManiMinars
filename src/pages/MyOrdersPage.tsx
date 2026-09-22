@@ -39,55 +39,46 @@ import { getSupabase } from '../services/supabase';
 
 export function getOrderItems(order: any): any[] {
   if (!order) return [];
+  try {
+    if (Array.isArray(order.items) && order.items.length)
+      return order.items;
 
-  const parseCandidate = (val: any): any[] => {
-    if (!val) return [];
-    if (Array.isArray(val)) return val;
-    if (typeof val === 'string') {
-      const trimmed = val.trim();
-      if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[]') return [];
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed;
-        if (typeof parsed === 'string') {
-          try {
-            const doubleParsed = JSON.parse(parsed);
-            if (Array.isArray(doubleParsed)) return doubleParsed;
-            if (doubleParsed && typeof doubleParsed === 'object') return [doubleParsed];
-          } catch {}
-        }
-        if (parsed && typeof parsed === 'object') return [parsed];
-      } catch {}
-      return [];
+    if (typeof order.items === "string") {
+      const parsed = JSON.parse(order.items);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+      if (parsed && typeof parsed === 'object') return [parsed];
     }
-    if (typeof val === 'object') return [val];
+
+    if (Array.isArray(order.products_json) && order.products_json.length)
+      return order.products_json;
+
+    if (typeof order.products_json === "string") {
+      const parsed = JSON.parse(order.products_json);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+      if (parsed && typeof parsed === 'object') return [parsed];
+    }
+
+    if (typeof order.items === "string") {
+      try {
+        const p = JSON.parse(order.items);
+        if (Array.isArray(p)) return p;
+      } catch {}
+    }
+
+    if (typeof order.products_json === "string") {
+      try {
+        const p = JSON.parse(order.products_json);
+        if (Array.isArray(p)) return p;
+      } catch {}
+    }
+
+    if (Array.isArray(order.items)) return order.items;
+    if (Array.isArray(order.products_json)) return order.products_json;
+
     return [];
-  };
-
-  // 1. Try order.products_json first
-  const fromProductsJson = parseCandidate(order.products_json);
-  if (fromProductsJson.length > 0) {
-    return fromProductsJson;
+  } catch {
+    return [];
   }
-
-  // 2. Try order.items
-  const fromItems = parseCandidate(order.items);
-  if (fromItems.length > 0) {
-    return fromItems;
-  }
-
-  // Fallback if order has products or items_json
-  const fromProducts = parseCandidate((order as any).products);
-  if (fromProducts.length > 0) {
-    return fromProducts;
-  }
-
-  const fromItemsJson = parseCandidate((order as any).items_json);
-  if (fromItemsJson.length > 0) {
-    return fromItemsJson;
-  }
-
-  return [];
 }
 
 // Visual timeline steps
@@ -693,9 +684,71 @@ export default function MyOrdersPage() {
             </div>
 
             {filteredOrders.map((order) => {
-              const extractedProducts = getOrderItems(order);
-              console.log("ORDER PRODUCTS:", order.products_json);
-              console.log("PARSED PRODUCTS:", extractedProducts);
+              const orderProducts = (() => {
+                try {
+                  if (Array.isArray(order.items) && order.items.length)
+                    return order.items;
+
+                  if (typeof order.items === "string") {
+                    const parsed = JSON.parse(order.items);
+                    if (Array.isArray(parsed) && parsed.length) return parsed;
+                    if (parsed && typeof parsed === 'object') return [parsed];
+                  }
+
+                  if (Array.isArray(order.products_json) && order.products_json.length)
+                    return order.products_json;
+
+                  if (typeof order.products_json === "string") {
+                    const parsed = JSON.parse(order.products_json);
+                    if (Array.isArray(parsed) && parsed.length) return parsed;
+                    if (parsed && typeof parsed === 'object') return [parsed];
+                  }
+
+                  if (typeof order.items === "string") {
+                    try {
+                      const p = JSON.parse(order.items);
+                      if (Array.isArray(p)) return p;
+                    } catch {}
+                  }
+
+                  if (typeof order.products_json === "string") {
+                    try {
+                      const p = JSON.parse(order.products_json);
+                      if (Array.isArray(p)) return p;
+                    } catch {}
+                  }
+
+                  if (Array.isArray(order.items)) return order.items;
+                  if (Array.isArray(order.products_json)) return order.products_json;
+
+                  return [];
+                } catch {
+                  return [];
+                }
+              })();
+
+              console.log("ORDER ITEMS:", order.items);
+              console.log("ORDER PRODUCTS_JSON:", order.products_json);
+              console.log("ORDER PRODUCTS:", orderProducts);
+
+              let customerObj: any = order.customer;
+              if (typeof customerObj === 'string') {
+                try {
+                  customerObj = JSON.parse(customerObj);
+                } catch {
+                  customerObj = {};
+                }
+              }
+              const customer = {
+                fullName: customerObj?.fullName || customerObj?.name || order.customer_name || (order as any).fullName || (order as any).name || 'Customer',
+                phone: customerObj?.phone || order.phone || '',
+                email: customerObj?.email || order.email || '',
+                address: customerObj?.address || order.address || '',
+                city: customerObj?.city || order.city || '',
+                notes: customerObj?.notes || order.notes || null,
+              };
+
+              const paymentProof = order.payment_proof_url || order.payment_proof_image || order.paymentProofUrl || order.paymentProofImage || null;
               const statusNormalized = normalizeOrderStatus(order.status);
               const paymentInfo = getPaymentMethodDisplay(order);
 
@@ -733,9 +786,9 @@ export default function MyOrdersPage() {
                           {formatOrderDate(order.createdAt)}
                         </span>
                         <span>•</span>
-                        <span className="font-medium text-neutral-700">{order.customer?.fullName}</span>
+                        <span className="font-medium text-neutral-700">{customer.fullName}</span>
                         <span>•</span>
-                        <span className="font-mono text-neutral-600">{order.customer?.phone}</span>
+                        <span className="font-mono text-neutral-600">{customer.phone}</span>
                       </div>
                     </div>
 
@@ -908,17 +961,17 @@ export default function MyOrdersPage() {
                         <span>Delivery Destination</span>
                       </h4>
                       <div className="bg-white p-4 rounded-xl border border-neutral-200/80 space-y-1 text-xs">
-                        <p className="font-bold text-neutral-900 text-sm">{order.customer?.fullName}</p>
-                        <p className="font-mono text-neutral-600">{order.customer?.phone}</p>
-                        {order.customer?.email && (
-                          <p className="text-neutral-500">{order.customer.email}</p>
+                        <p className="font-bold text-neutral-900 text-sm">{customer.fullName}</p>
+                        <p className="font-mono text-neutral-600">{customer.phone}</p>
+                        {customer.email && (
+                          <p className="text-neutral-500">{customer.email}</p>
                         )}
                         <p className="text-neutral-700 pt-1 leading-relaxed">
-                          {order.customer?.address}, <strong>{order.customer?.city}</strong>
+                          {customer.address}, <strong>{customer.city}</strong>
                         </p>
-                        {order.customer?.notes && (
+                        {customer.notes && (
                           <p className="text-[11px] text-amber-700 bg-amber-50 p-2 rounded-lg mt-2 border border-amber-200/60">
-                            <strong>Note:</strong> {order.customer.notes}
+                            <strong>Note:</strong> {customer.notes}
                           </p>
                         )}
                       </div>
@@ -940,14 +993,14 @@ export default function MyOrdersPage() {
                         <p className="text-neutral-500 text-[11px]">{paymentInfo.sub}</p>
 
                         {/* Payment Proof / Receipt link */}
-                        {(order.paymentProofUrl || order.paymentProofImage) && (
+                        {paymentProof && (
                           <div className="pt-2 border-t border-neutral-100 flex items-center justify-between">
                             <span className="text-neutral-500 text-[11px]">Payment Proof Uploaded:</span>
                             <button
                               type="button"
                               onClick={() =>
                                 setPreviewImage({
-                                  url: order.paymentProofUrl || order.paymentProofImage || '',
+                                  url: paymentProof,
                                   title: `Payment Receipt for Order #${order.id}`,
                                 })
                               }
@@ -967,12 +1020,12 @@ export default function MyOrdersPage() {
                     <div className="flex items-center justify-between">
                       <h4 className="text-xs font-bold uppercase tracking-wider text-neutral-500 flex items-center gap-1.5">
                         <ShoppingBag className="w-4 h-4 text-[#E84D3D]" />
-                        <span>Products Ordered ({extractedProducts.length})</span>
+                        <span>Products Ordered ({orderProducts.length})</span>
                       </h4>
                       <span className="text-xs text-neutral-400 font-medium">PKR Currency</span>
                     </div>
 
-                    {extractedProducts.length === 0 ? (
+                    {orderProducts.length === 0 ? (
                       <div className="p-6 rounded-xl bg-neutral-50 text-neutral-400 text-xs italic border border-neutral-200 text-center">
                         No products found in order
                       </div>
@@ -990,16 +1043,22 @@ export default function MyOrdersPage() {
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-neutral-100">
-                            {extractedProducts.map((item: any, idx: number) => {
-                              const productName = item.product?.name || item.name || item.product_name || item.title || 'Product';
-                              const productCategory = item.product?.category || item.category;
-                              const size = item.selectedSize || item.size || item.selected_size || 'Standard';
-                              const colorName = item.selectedColor?.name || (typeof item.selectedColor === 'string' ? item.selectedColor : item.color || item.selected_color || item.colorName || 'Standard');
-                              const colorHex = item.selectedColor?.hex || item.colorHex;
-                              const quantity = item.quantity ?? item.qty ?? 1;
-                              const unitPrice = Number(item.price ?? item.unitPrice ?? item.product?.price ?? 0);
-                              const lineTotal = Number(item.lineTotal ?? item.total ?? (unitPrice * quantity));
-                              const image = item.product?.image || item.product?.images?.[0] || item.product?.colors?.[0]?.image || item.image || item.imageUrl || FALLBACK_GARMENT_IMAGE;
+                            {orderProducts.map((item: any, idx: number) => {
+                              const productName = item.product?.name || item.name || 'Product';
+                              const size = item.selectedSize || item.size || 'Standard';
+                              const color =
+                                item.selectedColor?.name ||
+                                (typeof item.selectedColor === 'string'
+                                  ? item.selectedColor
+                                  : item.color || 'Standard');
+                              const quantity = item.quantity ?? 1;
+                              const price = Number(item.price ?? item.unitPrice ?? item.product?.price ?? 0);
+                              const lineTotal = Number(item.lineTotal ?? item.total ?? (price * quantity));
+                              const image =
+                                item.product?.image ||
+                                item.product?.images?.[0] ||
+                                item.image ||
+                                FALLBACK_GARMENT_IMAGE;
 
                               return (
                                 <tr key={item.id || idx} className="hover:bg-neutral-50/40 transition-colors">
@@ -1025,11 +1084,6 @@ export default function MyOrdersPage() {
                                         <span className="font-bold text-neutral-900 block leading-snug">
                                           {productName}
                                         </span>
-                                        {productCategory && (
-                                          <span className="text-[10px] text-neutral-400 block font-medium">
-                                            {productCategory}
-                                          </span>
-                                        )}
                                         <span className="text-[10px] text-neutral-400 block mt-0.5">
                                           Item #{idx + 1}
                                         </span>
@@ -1046,17 +1100,9 @@ export default function MyOrdersPage() {
 
                                   {/* Color */}
                                   <td className="py-3 px-3">
-                                    <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-neutral-50 border border-neutral-200 text-neutral-800 text-xs">
-                                      {colorHex ? (
-                                        <span
-                                          className="w-3.5 h-3.5 rounded-full border border-black/15 shadow-2xs shrink-0"
-                                          style={{ backgroundColor: colorHex }}
-                                        />
-                                      ) : (
-                                        <span className="w-3 h-3 rounded-full bg-neutral-400 shrink-0" />
-                                      )}
-                                      <span className="font-medium">{colorName}</span>
-                                    </div>
+                                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-neutral-50 border border-neutral-200 text-neutral-800 text-xs font-medium">
+                                      {color}
+                                    </span>
                                   </td>
 
                                   {/* Quantity */}
@@ -1068,7 +1114,7 @@ export default function MyOrdersPage() {
 
                                   {/* Price */}
                                   <td className="py-3 px-3 text-right font-mono text-neutral-600">
-                                    PKR {unitPrice.toLocaleString()}
+                                    PKR {price.toLocaleString()}
                                   </td>
 
                                   {/* Line Total */}

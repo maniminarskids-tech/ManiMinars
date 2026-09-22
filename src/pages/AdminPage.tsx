@@ -65,55 +65,46 @@ export interface NormalizedOrderProduct {
 
 export function getOrderItems(order: any): any[] {
   if (!order) return [];
+  try {
+    if (Array.isArray(order.items) && order.items.length)
+      return order.items;
 
-  const parseCandidate = (val: any): any[] => {
-    if (!val) return [];
-    if (Array.isArray(val)) return val;
-    if (typeof val === 'string') {
-      const trimmed = val.trim();
-      if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[]') return [];
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) return parsed;
-        if (typeof parsed === 'string') {
-          try {
-            const doubleParsed = JSON.parse(parsed);
-            if (Array.isArray(doubleParsed)) return doubleParsed;
-            if (doubleParsed && typeof doubleParsed === 'object') return [doubleParsed];
-          } catch {}
-        }
-        if (parsed && typeof parsed === 'object') return [parsed];
-      } catch {}
-      return [];
+    if (typeof order.items === "string") {
+      const parsed = JSON.parse(order.items);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+      if (parsed && typeof parsed === 'object') return [parsed];
     }
-    if (typeof val === 'object') return [val];
+
+    if (Array.isArray(order.products_json) && order.products_json.length)
+      return order.products_json;
+
+    if (typeof order.products_json === "string") {
+      const parsed = JSON.parse(order.products_json);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+      if (parsed && typeof parsed === 'object') return [parsed];
+    }
+
+    if (typeof order.items === "string") {
+      try {
+        const p = JSON.parse(order.items);
+        if (Array.isArray(p)) return p;
+      } catch {}
+    }
+
+    if (typeof order.products_json === "string") {
+      try {
+        const p = JSON.parse(order.products_json);
+        if (Array.isArray(p)) return p;
+      } catch {}
+    }
+
+    if (Array.isArray(order.items)) return order.items;
+    if (Array.isArray(order.products_json)) return order.products_json;
+
     return [];
-  };
-
-  // 1. Try order.products_json first
-  const fromProductsJson = parseCandidate(order.products_json);
-  if (fromProductsJson.length > 0) {
-    return fromProductsJson;
+  } catch {
+    return [];
   }
-
-  // 2. Try order.items
-  const fromItems = parseCandidate(order.items);
-  if (fromItems.length > 0) {
-    return fromItems;
-  }
-
-  // Fallback if order has products or items_json
-  const fromProducts = parseCandidate((order as any).products);
-  if (fromProducts.length > 0) {
-    return fromProducts;
-  }
-
-  const fromItemsJson = parseCandidate((order as any).items_json);
-  if (fromItemsJson.length > 0) {
-    return fromItemsJson;
-  }
-
-  return [];
 }
 
 /**
@@ -1279,9 +1270,71 @@ export const AdminPage: React.FC = () => {
                 </div>
               ) : (
                 filteredOrders.map((order) => {
-                  const extractedProducts = getOrderItems(order);
-                  console.log("ORDER PRODUCTS:", order.products_json);
-                  console.log("PARSED PRODUCTS:", extractedProducts);
+                  const orderProducts = (() => {
+                    try {
+                      if (Array.isArray(order.items) && order.items.length)
+                        return order.items;
+
+                      if (typeof order.items === "string") {
+                        const parsed = JSON.parse(order.items);
+                        if (Array.isArray(parsed) && parsed.length) return parsed;
+                        if (parsed && typeof parsed === 'object') return [parsed];
+                      }
+
+                      if (Array.isArray(order.products_json) && order.products_json.length)
+                        return order.products_json;
+
+                      if (typeof order.products_json === "string") {
+                        const parsed = JSON.parse(order.products_json);
+                        if (Array.isArray(parsed) && parsed.length) return parsed;
+                        if (parsed && typeof parsed === 'object') return [parsed];
+                      }
+
+                      if (typeof order.items === "string") {
+                        try {
+                          const p = JSON.parse(order.items);
+                          if (Array.isArray(p)) return p;
+                        } catch {}
+                      }
+
+                      if (typeof order.products_json === "string") {
+                        try {
+                          const p = JSON.parse(order.products_json);
+                          if (Array.isArray(p)) return p;
+                        } catch {}
+                      }
+
+                      if (Array.isArray(order.items)) return order.items;
+                      if (Array.isArray(order.products_json)) return order.products_json;
+
+                      return [];
+                    } catch {
+                      return [];
+                    }
+                  })();
+
+                  console.log("ORDER ITEMS:", order.items);
+                  console.log("ORDER PRODUCTS_JSON:", order.products_json);
+                  console.log("ORDER PRODUCTS:", orderProducts);
+
+                  let customerObj: any = order.customer;
+                  if (typeof customerObj === 'string') {
+                    try {
+                      customerObj = JSON.parse(customerObj);
+                    } catch {
+                      customerObj = {};
+                    }
+                  }
+                  const customer = {
+                    fullName: customerObj?.fullName || customerObj?.name || order.customer_name || (order as any).fullName || (order as any).name || 'Customer',
+                    phone: customerObj?.phone || order.phone || '',
+                    email: customerObj?.email || order.email || '',
+                    address: customerObj?.address || order.address || '',
+                    city: customerObj?.city || order.city || '',
+                    notes: customerObj?.notes || order.notes || null,
+                  };
+
+                  const paymentProof = order.payment_proof_url || order.payment_proof_image || order.paymentProofUrl || order.paymentProofImage || null;
 
                   // Pre-format WhatsApp message for courier update
                   const waPaymentMethod =
@@ -1289,15 +1342,15 @@ export const AdminPage: React.FC = () => {
                       ? 'Meezan Bank Transfer'
                       : order.paymentMethod === 'raast'
                       ? 'Raast Payment'
-                      : order.paymentMethod.toUpperCase();
+                      : String(order.payment_method || order.paymentMethod || '').toUpperCase();
 
-                  const waCustomerMsg = `Salam ${order.customer.fullName}! 👋 
+                  const waCustomerMsg = `Salam ${customer.fullName}! 👋 
 This is Mani Minars Customer Logistics regarding your order #${order.id}.
 Status: ${order.status.toUpperCase()}
 Total Amount: PKR ${order.total.toLocaleString()} (${waPaymentMethod})
-${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''}Delivery Address: ${order.customer.address}, ${order.customer.city}`;
+${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${order.paymentReference || order.payment_reference}\n` : ''}Delivery Address: ${customer.address}, ${customer.city}`;
 
-                  const cleanCustomerPhone = order.customer.phone.replace(/[^0-9]/g, '');
+                  const cleanCustomerPhone = customer.phone.replace(/[^0-9]/g, '');
                   const isPending = order.status === 'Pending Verification' || order.status === 'pending';
                   const isApproved = order.status === 'Approved';
                   const isRejected = order.status === 'Rejected';
@@ -1391,12 +1444,12 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                           </span>
                           <div>
                             <h4 className="font-bold text-neutral-900 text-sm">
-                              {order.customer.fullName}
+                              {customer.fullName}
                             </h4>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="font-mono text-neutral-700">{order.customer.phone}</span>
+                              <span className="font-mono text-neutral-700">{customer.phone}</span>
                             </div>
-                            <p className="text-neutral-500 text-[11px] mt-0.5">{order.customer.email}</p>
+                            <p className="text-neutral-500 text-[11px] mt-0.5">{customer.email}</p>
                           </div>
 
                           <div className="pt-1">
@@ -1416,11 +1469,11 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
 
                           <div className="pt-1 text-neutral-700">
                             <p className="font-medium text-[11px]">
-                              📍 {order.customer.address}, <strong className="text-neutral-900">{order.customer.city}</strong>
+                              📍 {customer.address}, <strong className="text-neutral-900">{customer.city}</strong>
                             </p>
-                            {order.customer.notes && (
+                            {customer.notes && (
                               <p className="mt-1 text-neutral-600 bg-neutral-50 p-2 rounded-lg border border-neutral-200 text-[11px]">
-                                <span className="font-semibold">Note:</span> {order.customer.notes}
+                                <span className="font-semibold">Note:</span> {customer.notes}
                               </p>
                             )}
                           </div>
@@ -1428,31 +1481,28 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                           {/* Ordered Products */}
                           <div className="pt-3 border-t border-neutral-100 space-y-2">
                             <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-500 block">
-                              Ordered Products ({extractedProducts.length})
+                              Ordered Products ({orderProducts.length})
                             </span>
-                            {extractedProducts.length === 0 ? (
+                            {orderProducts.length === 0 ? (
                               <div className="p-2.5 rounded-lg bg-neutral-50 text-neutral-400 text-xs italic border border-neutral-200">
                                 No products found in order
                               </div>
                             ) : (
                               <div className="space-y-2">
-                                {extractedProducts.map((item: any, index: number) => {
-                                  const productName =
-                                    item.product?.name || item.name || item.product_name || item.title || 'Product';
+                                {orderProducts.map((item: any, index: number) => {
+                                  const productName = item.product?.name || item.name || 'Product';
                                   const productImage =
                                     item.product?.image ||
                                     item.product?.images?.[0] ||
                                     item.image ||
-                                    item.imageUrl ||
                                     FALLBACK_GARMENT_IMAGE;
-                                  const productCategory = item.product?.category || item.category;
-                                  const size = item.selectedSize || item.size || item.selected_size || 'Standard';
+                                  const size = item.selectedSize || item.size || 'Standard';
                                   const color =
                                     item.selectedColor?.name ||
                                     (typeof item.selectedColor === 'string'
                                       ? item.selectedColor
-                                      : item.color || item.selected_color || item.colorName || 'Standard');
-                                  const quantity = item.quantity ?? item.qty ?? 1;
+                                      : item.color || 'Standard');
+                                  const quantity = item.quantity ?? 1;
                                   const price = Number(item.price ?? item.unitPrice ?? item.product?.price ?? 0);
 
                                   return (
@@ -1473,11 +1523,6 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                                           <div className="font-bold text-neutral-900 leading-snug">
                                             {productName}
                                           </div>
-                                          {productCategory && (
-                                            <span className="text-[10px] text-neutral-400 font-medium block">
-                                              {productCategory}
-                                            </span>
-                                          )}
                                         </div>
                                       </div>
                                       <div className="grid grid-cols-2 gap-1 text-[11px] text-neutral-600 pt-1 border-t border-neutral-200/60">
@@ -1542,17 +1587,17 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                               <span className="text-[10px] text-neutral-500 font-semibold uppercase tracking-wider block mb-1">
                                 Payment Proof Screenshot
                               </span>
-                              {order.paymentProofImage ? (
+                              {paymentProof ? (
                                 <div className="space-y-1.5">
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      setProofModalUrl({ url: order.paymentProofImage!, orderId: order.id })
+                                      setProofModalUrl({ url: paymentProof, orderId: order.id })
                                     }
                                     className="group relative w-full h-24 bg-neutral-900 rounded-lg overflow-hidden border border-neutral-300 flex items-center justify-center cursor-pointer"
                                   >
                                     <img
-                                      src={order.paymentProofImage}
+                                      src={paymentProof}
                                       alt="Payment proof screenshot"
                                       className="w-full h-full object-cover group-hover:opacity-75 transition-opacity"
                                     />
@@ -1565,7 +1610,7 @@ ${order.paymentReference ? `Payment Ref / TID: ${order.paymentReference}\n` : ''
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      setProofModalUrl({ url: order.paymentProofImage!, orderId: order.id })
+                                      setProofModalUrl({ url: paymentProof, orderId: order.id })
                                     }
                                     className="w-full py-1 rounded-lg border border-neutral-300 bg-white hover:bg-neutral-50 text-[11px] font-semibold text-neutral-800 flex items-center justify-center gap-1 transition-colors"
                                   >
