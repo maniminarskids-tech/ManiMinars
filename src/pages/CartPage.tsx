@@ -385,7 +385,7 @@ export const CartPage: React.FC = () => {
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              {/* Direct WhatsApp Contact CTA */}
+              {/* Direct WhatsApp Order CTA */}
               <a
                 id="whatsapp-cart-order-btn"
                 href={buildCartWhatsAppUrl(cart, total, deliveryFee)}
@@ -394,7 +394,7 @@ export const CartPage: React.FC = () => {
                 className="w-full py-3 px-6 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs sm:text-sm font-bold uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2"
               >
                 <MessageCircle className="w-4 h-4 fill-current" />
-                <span>Contact Us</span>
+                <span>Order Bag via WhatsApp</span>
               </a>
 
               <div className="p-3 bg-neutral-50 rounded-xl text-center text-xs text-neutral-500 flex items-center justify-center gap-1.5">

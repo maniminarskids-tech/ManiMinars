@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
-import confetti from 'canvas-confetti';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { useCart } from '../context/CartContext';
@@ -23,7 +21,6 @@ import {
   AlertCircle,
   X,
   Info,
-  Package,
 } from 'lucide-react';
 
 export const CheckoutPage: React.FC = () => {
@@ -48,7 +45,6 @@ export const CheckoutPage: React.FC = () => {
   const [paymentError, setPaymentError] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isSubmittedSuccess, setIsSubmittedSuccess] = useState(false);
   const [orderComplete, setOrderComplete] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [submittedReference, setSubmittedReference] = useState('');
@@ -172,27 +168,9 @@ export const CheckoutPage: React.FC = () => {
       console.error('Error saving order:', err);
     }
 
-    // Micro-animation: Trigger button success checkmark state and subtle celebration
     setIsProcessing(false);
-    setIsSubmittedSuccess(true);
-
-    try {
-      confetti({
-        particleCount: 45,
-        spread: 60,
-        origin: { y: 0.65 },
-        colors: ['#10B981', '#E84D3D', '#F5BE38'],
-        disableForReducedMotion: true,
-      });
-    } catch {
-      // ignore
-    }
-
-    // Smooth transition: Allow the customer to clearly perceive the checkmark feedback before swapping views
-    setTimeout(() => {
-      setOrderComplete(true);
-      clearCart();
-    }, 800);
+    setOrderComplete(true);
+    clearCart();
   };
 
   // Order Complete Screen
@@ -221,43 +199,12 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
       <div className="min-h-screen flex flex-col bg-[#FAF9F6]">
         <Header />
         <main className="flex-1 max-w-2xl mx-auto px-4 sm:px-6 py-12 sm:py-16 text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.94, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            className="bg-white rounded-3xl p-6 sm:p-10 border border-neutral-200/80 shadow-md"
-          >
-            {/* Elegant Spring-Animated Success Checkmark */}
-            <div className="relative mx-auto mb-5 w-20 h-20 flex items-center justify-center">
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: [1, 1.2, 1], opacity: [0.6, 0.2, 0.6] }}
-                transition={{ repeat: Infinity, duration: 2.5, ease: 'easeInOut' }}
-                className="absolute inset-0 rounded-full bg-emerald-100"
-              />
-              <motion.div
-                initial={{ scale: 0, rotate: -45 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{
-                  type: 'spring',
-                  stiffness: 280,
-                  damping: 18,
-                  delay: 0.1,
-                }}
-                className="relative z-10 w-16 h-16 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/25 ring-4 ring-emerald-50"
-              >
-                <motion.div
-                  initial={{ scale: 0.5, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.25, duration: 0.25 }}
-                >
-                  <Check className="w-8 h-8 stroke-[3]" />
-                </motion.div>
-              </motion.div>
+          <div className="bg-white rounded-3xl p-6 sm:p-10 border border-neutral-200/80 shadow-md">
+            <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-4 animate-bounce">
+              <CheckCircle2 className="w-8 h-8" />
             </div>
 
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-bold uppercase tracking-wider mb-2 border border-amber-200">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
               <span>Order Received • Verification Pending</span>
             </div>
 
@@ -327,21 +274,11 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
               href={whatsappConfirmUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="w-full py-4 px-4 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs sm:text-sm font-bold uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 mb-3"
+              className="w-full py-4 px-4 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-xs sm:text-sm font-bold uppercase tracking-wider transition-all shadow-md flex items-center justify-center gap-2 mb-4"
             >
               <MessageCircle className="w-5 h-5 fill-current" />
               <span>Send Payment Proof on WhatsApp (+92 304 6466815)</span>
             </a>
-
-            {/* Track Order Live Button */}
-            <button
-              type="button"
-              onClick={() => navigate(`/my-orders?q=${orderId}`)}
-              className="w-full py-3.5 px-4 rounded-xl bg-neutral-900 hover:bg-black text-white text-xs sm:text-sm font-bold uppercase tracking-wider transition-all shadow-xs flex items-center justify-center gap-2 mb-5 cursor-pointer"
-            >
-              <Package className="w-4 h-4 text-[#E84D3D]" />
-              <span>Track Live Order Status (#{orderId})</span>
-            </button>
 
             <p className="text-xs text-neutral-500 mb-6">
               Our fulfillment team in Lahore will verify your transfer and dispatch via Trax / TCS Express within 24 hours.
@@ -350,18 +287,18 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
             <div className="flex flex-col sm:flex-row justify-center gap-3">
               <button
                 onClick={() => navigate('/kids')}
-                className="px-6 py-3 rounded-xl bg-[#E84D3D] hover:bg-[#DF3E2E] text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
+                className="px-6 py-3 rounded-xl bg-[#E84D3D] hover:bg-[#DF3E2E] text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
               >
                 Shop Kids (0–10Y)
               </button>
               <button
                 onClick={() => navigate('/juniors')}
-                className="px-6 py-3 rounded-xl bg-[#F5BE38] hover:bg-[#E8B029] text-neutral-900 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm cursor-pointer"
+                className="px-6 py-3 rounded-xl bg-[#F5BE38] hover:bg-[#E8B029] text-neutral-900 text-xs font-bold uppercase tracking-wider transition-colors shadow-sm"
               >
                 Shop Juniors (11–16Y)
               </button>
             </div>
-          </motion.div>
+          </div>
         </main>
         <Footer />
       </div>
@@ -942,42 +879,22 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                 </div>
               </div>
 
-              {/* Submit CTA with micro-animation & success checkmark feedback */}
-              <motion.button
+              {/* Submit CTA */}
+              <button
                 id="place-order-submit-btn"
                 type="submit"
-                disabled={isProcessing || isSubmittedSuccess}
-                animate={{
-                  backgroundColor: isSubmittedSuccess ? '#10B981' : '#E84D3D',
-                  scale: isSubmittedSuccess ? [1, 1.02, 1] : 1,
-                }}
-                transition={{ duration: 0.3 }}
-                className="w-full py-4 px-6 rounded-xl text-white text-xs sm:text-sm font-bold uppercase tracking-widest shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-95 overflow-hidden relative"
+                disabled={isProcessing}
+                className="w-full py-4 px-6 rounded-xl bg-[#E84D3D] hover:bg-[#DF3E2E] text-white text-xs sm:text-sm font-bold uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
               >
-                {isSubmittedSuccess ? (
-                  <motion.div
-                    initial={{ scale: 0.7, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    transition={{ type: 'spring', stiffness: 450, damping: 22 }}
-                    className="flex items-center justify-center gap-2"
-                  >
-                    <div className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center">
-                      <Check className="w-3.5 h-3.5 text-white stroke-[3]" />
-                    </div>
-                    <span>Order Placed Successfully!</span>
-                  </motion.div>
-                ) : isProcessing ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Verifying & Submitting...</span>
-                  </div>
+                {isProcessing ? (
+                  <span>Verifying & Submitting...</span>
                 ) : (
                   <>
                     <span>Submit Order (PKR {total.toLocaleString()})</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
-              </motion.button>
+              </button>
 
               <div className="p-3 bg-neutral-50 rounded-xl text-center text-xs text-neutral-500 flex items-center justify-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-green-600" />

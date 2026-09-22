@@ -342,7 +342,7 @@ export const CartDrawer: React.FC = () => {
                 </button>
               </div>
 
-              {/* Direct WhatsApp Contact CTA */}
+              {/* Direct WhatsApp Order CTA */}
               <a
                 href={buildCartWhatsAppUrl(cart, total, deliveryFee)}
                 target="_blank"
@@ -350,7 +350,7 @@ export const CartDrawer: React.FC = () => {
                 className="w-full py-2.5 px-4 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white text-center text-xs font-bold uppercase tracking-wider transition-colors shadow-xs flex items-center justify-center gap-2"
               >
                 <MessageCircle className="w-4 h-4 fill-current" />
-                <span>Contact Us</span>
+                <span>Order via WhatsApp</span>
               </a>
             </div>
           </div>

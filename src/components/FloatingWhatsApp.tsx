@@ -23,20 +23,20 @@ export const FloatingWhatsApp: React.FC = () => {
                 <h4 className="text-xs font-bold text-neutral-900">Mani Minars Care</h4>
                 <span className="text-[10px] text-green-600 font-semibold flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                  Online for Queries & Support
+                  Online for Direct Orders
                 </span>
               </div>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="text-neutral-400 hover:text-neutral-600 p-1 cursor-pointer"
+              className="text-neutral-400 hover:text-neutral-600 p-1"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           <p className="text-xs text-neutral-600 mb-3 leading-relaxed">
-            Need urgent sizing advice or have any questions? Chat with our team directly on WhatsApp.
+            Need urgent sizing advice or want to place your order directly via WhatsApp?
           </p>
 
           <a
@@ -46,7 +46,7 @@ export const FloatingWhatsApp: React.FC = () => {
             className="w-full py-2.5 px-4 bg-[#25D366] hover:bg-[#20ba59] text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-colors"
           >
             <MessageCircle className="w-4 h-4" />
-            <span>Chat on WhatsApp (+92 304 6466815)</span>
+            <span>Chat & Order on WhatsApp</span>
           </a>
         </div>
       )}
@@ -55,11 +55,12 @@ export const FloatingWhatsApp: React.FC = () => {
       <button
         id="floating-whatsapp-btn"
         onClick={() => setIsOpen(!isOpen)}
-        className="group flex items-center gap-2 py-2.5 px-4 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs rounded-full shadow-lg hover:shadow-xl transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-[#25D366]/30 cursor-pointer"
-        aria-label="Contact Us on WhatsApp"
+        className="group flex items-center gap-2.5 py-2.5 px-4 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs rounded-full shadow-lg hover:shadow-xl transition-all duration-200 focus:outline-none focus:ring-4 focus:ring-[#25D366]/30"
+        aria-label="Direct WhatsApp Order and Support"
       >
-        <MessageCircle className="w-4 h-4 fill-current" />
-        <span className="font-semibold">Contact Us</span>
+        <MessageCircle className="w-5 h-5 fill-current" />
+        <span className="hidden sm:inline font-semibold">Order via WhatsApp</span>
+        <span className="sm:hidden font-semibold">WhatsApp</span>
       </button>
     </div>
   );
