@@ -215,6 +215,12 @@ export const CheckoutPage: React.FC = () => {
 
     // Save immediately to Supabase and local cache
     try {
+      if (newOrder.customer?.phone) {
+        localStorage.setItem('mm_customer_phone', newOrder.customer.phone);
+        localStorage.setItem('mani_minars_customer_phone', newOrder.customer.phone);
+      }
+      localStorage.setItem('mani_minars_last_order_query', newOrder.id);
+      localStorage.setItem('mani_minars_last_order_id', newOrder.id);
       await addOrder(newOrder);
     } catch (err) {
       console.error('Error saving order:', err);

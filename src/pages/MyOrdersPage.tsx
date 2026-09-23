@@ -238,16 +238,23 @@ export default function MyOrdersPage() {
     loadOrdersDirectlyFromSupabase();
   };
 
+  // Merge direct Supabase orders with context orders to guarantee newly placed orders are never lost
+  const sourceOrders = useMemo(() => {
+    if (supabaseOrders.length === 0) return orders;
+    const remoteIds = new Set(supabaseOrders.map((o) => o.id));
+    const localOnly = orders.filter((o) => !remoteIds.has(o.id));
+    return [...supabaseOrders, ...localOnly];
+  }, [supabaseOrders, orders]);
+
   // 3. Fetch and filter all matching orders from the orders table
   // 7. Do not remove orders until status is Delivered (all orders matching lookup are shown)
   const filteredOrders = useMemo(() => {
     const lookup = (customerPhone || activeSearchQuery).trim();
     if (!lookup) {
-      return [];
+      // When no filter is specified, show all store orders from Supabase / cache
+      return sourceOrders;
     }
 
-    // Direct Supabase orders are primary source of truth, fallback to context orders
-    const sourceOrders = supabaseOrders.length > 0 ? supabaseOrders : orders;
     const queryDigits = normalizePhoneNumber(lookup);
     const queryLower = lookup.toLowerCase();
 
@@ -277,7 +284,7 @@ export default function MyOrdersPage() {
 
       return false;
     });
-  }, [supabaseOrders, orders, customerPhone, activeSearchQuery]);
+  }, [sourceOrders, customerPhone, activeSearchQuery]);
 
   // Determine timeline step progression based on normalized status
   const getStepStatus = (orderStatus: string, stepKey: string) => {
@@ -571,7 +578,7 @@ export default function MyOrdersPage() {
         </section>
 
         {/* Search Results / Order Tracking Content */}
-        {activeSearchQuery.trim() === '' && customerPhone.trim() === '' ? (
+        {filteredOrders.length === 0 && activeSearchQuery.trim() === '' && customerPhone.trim() === '' ? (
           /* Empty Search Initial State */
           <div className="bg-white rounded-2xl border border-neutral-200 p-8 sm:p-12 text-center max-w-xl mx-auto space-y-4">
             <div className="w-16 h-16 rounded-full bg-orange-50 text-[#E84D3D] flex items-center justify-center mx-auto">

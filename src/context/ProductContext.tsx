@@ -23,6 +23,7 @@ interface ProductContextType {
   ) => Promise<void>;
   deleteOrder: (orderId: string) => Promise<void>;
   refreshOrders: () => Promise<void>;
+  fetchOrders: () => Promise<void>;
   isOrdersLoading: boolean;
   deliverySettings: DeliverySettings;
   updateDeliverySettings: (settings: Partial<DeliverySettings>) => void;
@@ -224,26 +225,41 @@ export function orderToRow(order: Order): Record<string, any> {
  * Parses both new schema (order_id, customer_name, products_json) and previous columns.
  */
 export function rowToOrder(row: any): Order {
-  const customer = row.customer
-    ? typeof row.customer === 'string'
-      ? JSON.parse(row.customer)
-      : row.customer
-    : {
-        fullName: row.customer_name || 'Customer',
-        phone: row.phone || '',
-        email: row.email || '',
-        city: row.city || 'Pakistan',
-        address: row.address || '',
-        notes: row.notes || undefined,
-      };
+  let customer: any = {
+    fullName: row.customer_name || 'Customer',
+    phone: row.phone || '',
+    email: row.email || '',
+    city: row.city || 'Pakistan',
+    address: row.address || '',
+    notes: row.notes || undefined,
+  };
+
+  if (row.customer) {
+    if (typeof row.customer === 'string') {
+      try {
+        customer = JSON.parse(row.customer);
+      } catch {
+        // retain default customer mapping
+      }
+    } else if (typeof row.customer === 'object') {
+      customer = row.customer;
+    }
+  }
 
   const parseItems = (val: any): any[] => {
     if (!val) return [];
     if (Array.isArray(val)) return val;
     if (typeof val === 'string') {
       try {
-        const parsed = JSON.parse(val);
-        return Array.isArray(parsed) ? parsed : [parsed];
+        let parsed = JSON.parse(val);
+        if (typeof parsed === 'string') {
+          try {
+            parsed = JSON.parse(parsed);
+          } catch {
+            // retain first parse
+          }
+        }
+        return Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
       } catch {
         return [];
       }
@@ -262,31 +278,31 @@ export function rowToOrder(row: any): Order {
     createdAt: row.created_at || new Date().toISOString(),
     customer,
     items,
-    products_json: fromProductsJson.length > 0 ? fromProductsJson : fromItems,
+    products_json: items,
     subtotal: Number(row.subtotal) || 0,
-    deliveryFee: Number(row.delivery_fee) || 0,
+    deliveryFee: Number(row.delivery_fee ?? row.deliveryFee) || 0,
     discount: Number(row.discount) || 0,
     total: Number(row.total_amount ?? row.total) || 0,
     total_amount: Number(row.total_amount ?? row.total) || 0,
-    paymentMethod: row.payment_method || 'bank_transfer',
-    paymentReference: row.payment_reference || undefined,
-    paymentProofImage: row.payment_proof_url ?? row.payment_proof_image ?? undefined,
-    paymentProofUrl: row.payment_proof_url ?? row.payment_proof_image ?? undefined,
-    payment_proof_url: row.payment_proof_url ?? row.payment_proof_image ?? undefined,
-    payment_proof_image: row.payment_proof_url ?? row.payment_proof_image ?? undefined,
-    customer_name: customer.fullName,
-    phone: customer.phone,
-    email: customer.email,
-    address: customer.address,
-    city: customer.city,
-    notes: customer.notes,
-    payment_method: row.payment_method || 'bank_transfer',
-    payment_reference: row.payment_reference || undefined,
-    paymentStatus: row.payment_status || 'pending',
-    shippingTier: row.shipping_tier || 'standard',
-    couponCode: row.coupon_code || undefined,
+    paymentMethod: row.payment_method || row.paymentMethod || 'bank_transfer',
+    paymentReference: row.payment_reference || row.paymentReference || undefined,
+    paymentProofImage: row.payment_proof_url ?? row.payment_proof_image ?? row.paymentProofImage ?? undefined,
+    paymentProofUrl: row.payment_proof_url ?? row.payment_proof_image ?? row.paymentProofUrl ?? undefined,
+    payment_proof_url: row.payment_proof_url ?? row.payment_proof_image ?? row.paymentProofUrl ?? undefined,
+    payment_proof_image: row.payment_proof_url ?? row.payment_proof_image ?? row.paymentProofImage ?? undefined,
+    customer_name: customer.fullName || row.customer_name || 'Customer',
+    phone: customer.phone || row.phone || '',
+    email: customer.email || row.email || '',
+    address: customer.address || row.address || '',
+    city: customer.city || row.city || 'Pakistan',
+    notes: customer.notes || row.notes || undefined,
+    payment_method: row.payment_method || row.paymentMethod || 'bank_transfer',
+    payment_reference: row.payment_reference || row.paymentReference || undefined,
+    paymentStatus: row.payment_status || row.paymentStatus || 'pending',
+    shippingTier: row.shipping_tier || row.shippingTier || 'standard',
+    couponCode: row.coupon_code || row.couponCode || undefined,
     status: (row.status || 'Pending Verification') as OrderStatus,
-    trackingNumber: row.tracking_number || undefined,
+    trackingNumber: row.tracking_number || row.trackingNumber || undefined,
     courier: row.courier || undefined,
   };
 }
@@ -537,30 +553,29 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     saveToLocalCache(products);
   }, [products, saveToLocalCache]);
 
-  // 4. Orders state
+  // 4. Orders state: initialize from local cache safely without purging valid orders
   const [orders, setOrders] = useState<Order[]>(() => {
     try {
       const stored = localStorage.getItem('mani_minars_orders_v1');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          // Clear legacy cache format automatically if items or products_json are empty
-          const hasEmptyLegacyOrders = parsed.some(
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Keep all valid orders (filter out empty corrupt entries instead of nuking entire cache)
+          const validOrders = parsed.filter(
             (o: any) =>
-              (!o.items || o.items.length === 0) &&
-              (!o.products_json || o.products_json.length === 0)
+              o &&
+              (o.id || o.order_id) &&
+              ((Array.isArray(o.items) && o.items.length > 0) ||
+                (Array.isArray(o.products_json) && o.products_json.length > 0) ||
+                (typeof o.products_json === 'string' && o.products_json.length > 2))
           );
-          if (hasEmptyLegacyOrders) {
-            console.info('Legacy order cache format detected. Purging old cache...');
-            localStorage.removeItem('mani_minars_orders_v1');
-            return INITIAL_ORDERS;
+          if (validOrders.length > 0) {
+            return validOrders;
           }
-          return parsed;
         }
       }
     } catch (e) {
       console.error('Error loading orders from storage', e);
-      localStorage.removeItem('mani_minars_orders_v1');
     }
     return INITIAL_ORDERS;
   });
@@ -569,37 +584,99 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Fetch orders from Supabase orders table (Supabase data always overrides localStorage cache)
   const refreshOrders = useCallback(async () => {
+    let cachedOrders: Order[] = [];
+    try {
+      const stored = localStorage.getItem('mani_minars_orders_v1');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          cachedOrders = parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Error reading cached orders:', e);
+    }
+    console.log("LOCAL STORAGE ORDERS:", cachedOrders);
+
     const supabase = getSupabase();
-    if (!supabase) return;
+    if (!supabase) {
+      const fallbackOrders = cachedOrders.length > 0 ? cachedOrders : INITIAL_ORDERS;
+      console.log("FINAL ORDERS STATE:", fallbackOrders);
+      return;
+    }
 
     try {
       setIsOrdersLoading(true);
-      const { data, error } = await supabase
+      // Supabase query: select("*") returning all rows without limit, date, status, or customer filters
+      const { data: rows, error } = await supabase
         .from('orders')
         .select('*')
         .order('created_at', { ascending: false });
 
+      console.log("RAW SUPABASE ORDERS:", rows);
+
       if (error) {
-        // Table might not exist yet or connection issue; retain local cache
         console.warn('Supabase orders fetch notice:', error.message);
+        console.log("FINAL ORDERS STATE:", cachedOrders.length > 0 ? cachedOrders : orders);
         return;
       }
 
-      if (data && data.length > 0) {
-        const remoteOrders = data.map(rowToOrder);
-        setOrders(remoteOrders);
+      if (rows && Array.isArray(rows)) {
+        const mappedOrders = rows.map(rowToOrder);
+        console.log("MAPPED ORDERS:", mappedOrders);
+
+        // Merge Supabase orders with any freshly placed local order not yet replicated to Supabase
+        const remoteIds = new Set(mappedOrders.map((o) => o.id));
+        const pendingLocalOrders = (Array.isArray(cachedOrders) ? cachedOrders : []).filter(
+          (localOrder) => {
+            if (!localOrder || !localOrder.id) return false;
+            if (remoteIds.has(localOrder.id)) return false;
+            // Ignore default mock orders if Supabase returned real store orders
+            if (mappedOrders.length > 0 && ['MM-94821', 'MM-94822', 'MM-94823'].includes(localOrder.id)) {
+              return false;
+            }
+            const items = localOrder.items || localOrder.products_json || [];
+            return Array.isArray(items) && items.length > 0;
+          }
+        );
+
+        const finalOrders = [...mappedOrders, ...pendingLocalOrders];
+        console.log("FINAL ORDERS STATE:", finalOrders);
+
+        setOrders(finalOrders);
         try {
-          localStorage.setItem('mani_minars_orders_v1', JSON.stringify(remoteOrders));
+          if (finalOrders.length > 0) {
+            localStorage.setItem('mani_minars_orders_v1', JSON.stringify(finalOrders));
+          }
         } catch (err) {
           console.error('Error caching remote orders:', err);
+        }
+
+        // Background sync: If any newly placed local order was missing from Supabase, persist it now
+        if (pendingLocalOrders.length > 0) {
+          for (const pendingOrder of pendingLocalOrders) {
+            try {
+              const row = orderToRow(pendingOrder);
+              let syncRes = await supabase.from('orders').upsert([row], { onConflict: 'order_id' });
+              if (syncRes.error) {
+                syncRes = await supabase.from('orders').upsert([row]);
+              }
+              if (syncRes.error) {
+                await supabase.from('orders').insert([row]);
+              }
+            } catch (syncErr) {
+              console.warn('Background sync of pending order failed:', syncErr);
+            }
+          }
         }
       }
     } catch (err) {
       console.error('Failed to sync orders with Supabase:', err);
+      console.log("FINAL ORDERS STATE:", orders);
     } finally {
       setIsOrdersLoading(false);
     }
-  }, []);
+  }, [orders]);
 
   // Subscribe to real-time order creations and updates from other devices / admin
   useEffect(() => {
@@ -649,6 +726,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   useEffect(() => {
+    if (!orders || orders.length === 0) return;
     try {
       localStorage.setItem('mani_minars_orders_v1', JSON.stringify(orders));
     } catch (e) {
@@ -872,9 +950,40 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (supabase) {
       try {
         const row = orderToRow(order);
-        const { error } = await supabase.from('orders').upsert([row]);
-        if (error) {
-          console.error('Failed to save order to Supabase orders table:', error.message);
+        let saveResult = await supabase.from('orders').upsert([row], { onConflict: 'order_id' });
+        if (saveResult.error) {
+          saveResult = await supabase.from('orders').upsert([row]);
+        }
+        if (saveResult.error) {
+          saveResult = await supabase.from('orders').insert([row]);
+        }
+        if (saveResult.error) {
+          console.warn('Upsert failed, falling back to core columns insert:', saveResult.error.message);
+          const coreRow = {
+            order_id: order.id,
+            customer_name: order.customer?.fullName || '',
+            phone: order.customer?.phone || '',
+            email: order.customer?.email || '',
+            address: order.customer?.address || '',
+            city: order.customer?.city || '',
+            notes: order.customer?.notes || null,
+            products_json: order.items || [],
+            subtotal: order.subtotal,
+            delivery_fee: order.deliveryFee,
+            discount: order.discount || 0,
+            total_amount: order.total,
+            payment_method: order.paymentMethod,
+            payment_reference: order.paymentReference || null,
+            payment_proof_url: order.paymentProofImage || null,
+            status: order.status || 'Pending Verification',
+            created_at: order.createdAt || new Date().toISOString(),
+          };
+          const coreRes = await supabase.from('orders').insert([coreRow]);
+          if (coreRes.error) {
+            console.error('Core order insert failed:', coreRes.error.message);
+          } else {
+            console.info('Order successfully saved to Supabase (core schema):', order.id);
+          }
         } else {
           console.info('Order successfully saved to Supabase:', order.id);
         }
@@ -882,6 +991,9 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         console.error('Error saving order to Supabase:', err);
       }
     }
+
+    // Trigger refresh to keep all listeners and state in sync
+    await refreshOrders();
   };
 
   const approveOrder = async (orderId: string) => {
@@ -999,6 +1111,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateOrderStatus,
         deleteOrder,
         refreshOrders,
+        fetchOrders: refreshOrders,
         isOrdersLoading,
         deliverySettings,
         updateDeliverySettings,
