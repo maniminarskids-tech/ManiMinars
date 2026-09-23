@@ -497,48 +497,64 @@ export const AdminPage: React.FC = () => {
   // Filtered products list
   const filteredProducts = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.category.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.ageGroup.toLowerCase().includes(productSearch.toLowerCase())
+      (p.name ?? '').toLowerCase().includes((productSearch ?? '').toLowerCase()) ||
+      (p.category ?? '').toLowerCase().includes((productSearch ?? '').toLowerCase()) ||
+      (p.ageGroup ?? '').toLowerCase().includes((productSearch ?? '').toLowerCase())
   );
 
   // Filtered inventory list
   const filteredInventory = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-      p.category.toLowerCase().includes(inventorySearch.toLowerCase()) ||
-      (p.sku && p.sku.toLowerCase().includes(inventorySearch.toLowerCase()))
+      (p.name ?? '').toLowerCase().includes((inventorySearch ?? '').toLowerCase()) ||
+      (p.category ?? '').toLowerCase().includes((inventorySearch ?? '').toLowerCase()) ||
+      ((p.sku ?? '').toLowerCase().includes((inventorySearch ?? '').toLowerCase()))
   );
 
   // Orders counts by status
-  const pendingVerificationOrders = orders.filter(
-    (o) => o.status === 'Pending Verification' || o.status === 'pending'
-  );
-  const approvedOrders = orders.filter((o) => o.status === 'Approved');
-  const rejectedOrders = orders.filter((o) => o.status === 'Rejected');
+  const pendingVerificationOrders = orders.filter((o) => {
+    const s = (o.status ?? '').toLowerCase();
+    return s === 'pending verification' || s === 'pending';
+  });
+  const approvedOrders = orders.filter((o) => (o.status ?? '').toLowerCase() === 'approved');
+  const rejectedOrders = orders.filter((o) => (o.status ?? '').toLowerCase() === 'rejected');
 
   // Filtered orders list
   const filteredOrders = orders.filter((o) => {
-    const q = orderSearch.toLowerCase().trim();
+    const q = (orderSearch ?? '').toLowerCase().trim();
+    const orderItems = extractOrderProducts(o);
+
+    const customerName = (o.customer?.fullName ?? (o as any).customer_name ?? (o as any).fullName ?? (o as any).name ?? '');
+    const customerCity = (o.customer?.city ?? (o as any).city ?? '');
+    const customerPhone = (o.customer?.phone ?? (o as any).phone ?? '');
+    const paymentRef = (o.paymentReference ?? (o as any).payment_reference ?? '');
+
     const matchesSearch =
       !q ||
-      o.id.toLowerCase().includes(q) ||
-      o.customer.fullName.toLowerCase().includes(q) ||
-      o.customer.city.toLowerCase().includes(q) ||
-      o.customer.phone.includes(q) ||
-      (o.paymentReference && o.paymentReference.toLowerCase().includes(q));
+      (o.id ?? '').toLowerCase().includes(q) ||
+      (customerName ?? '').toLowerCase().includes(q) ||
+      (customerCity ?? '').toLowerCase().includes(q) ||
+      (customerPhone ?? '').includes(q) ||
+      (paymentRef ?? '').toLowerCase().includes(q) ||
+      orderItems.some((item: any) =>
+        (item.product?.name ?? item.name ?? '').toLowerCase().includes(q) ||
+        (item.selectedSize ?? item.size ?? '').toLowerCase().includes(q) ||
+        (item.selectedColor?.name ?? (typeof item.selectedColor === 'string' ? item.selectedColor : item.color) ?? '').toLowerCase().includes(q)
+      );
 
     let matchesStatus = true;
-    if (orderStatusFilter === 'all') {
+    const currentStatus = (o.status ?? '').toLowerCase();
+    const selectedFilter = (orderStatusFilter ?? '').toLowerCase();
+
+    if (selectedFilter === 'all') {
       matchesStatus = true;
-    } else if (orderStatusFilter === 'pending' || orderStatusFilter === 'Pending Verification') {
-      matchesStatus = o.status === 'Pending Verification' || o.status === 'pending';
-    } else if (orderStatusFilter === 'Approved' || orderStatusFilter === 'approved') {
-      matchesStatus = o.status === 'Approved';
-    } else if (orderStatusFilter === 'Rejected' || orderStatusFilter === 'rejected') {
-      matchesStatus = o.status === 'Rejected';
+    } else if (selectedFilter === 'pending' || selectedFilter === 'pending verification') {
+      matchesStatus = currentStatus === 'pending verification' || currentStatus === 'pending';
+    } else if (selectedFilter === 'approved') {
+      matchesStatus = currentStatus === 'approved';
+    } else if (selectedFilter === 'rejected') {
+      matchesStatus = currentStatus === 'rejected';
     } else {
-      matchesStatus = o.status.toLowerCase() === orderStatusFilter.toLowerCase();
+      matchesStatus = currentStatus === selectedFilter;
     }
 
     return matchesSearch && matchesStatus;
@@ -689,7 +705,7 @@ export const AdminPage: React.FC = () => {
               <DollarSign className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-2xl font-bold text-neutral-900">
-              PKR {totalRevenue.toLocaleString()}
+              PKR {(totalRevenue ?? 0).toLocaleString()}
             </div>
             <span className="text-[11px] text-emerald-600 font-semibold">Bank & Raast volume</span>
           </div>
@@ -861,10 +877,10 @@ export const AdminPage: React.FC = () => {
                         </td>
 
                         <td className="py-3.5 px-4 font-bold text-neutral-900">
-                          PKR {prod.price.toLocaleString()}
+                          PKR {(prod.price ?? 0).toLocaleString()}
                           {prod.originalPrice && (
                             <span className="block text-[10px] text-neutral-400 line-through font-normal">
-                              PKR {prod.originalPrice.toLocaleString()}
+                              PKR {(prod.originalPrice ?? 0).toLocaleString()}
                             </span>
                           )}
                         </td>
@@ -1131,16 +1147,18 @@ export const AdminPage: React.FC = () => {
                       ? 'Raast Payment'
                       : String(order.payment_method || order.paymentMethod || '').toUpperCase();
 
+                  const orderTotal = order.total ?? (order as any).total_amount ?? 0;
                   const waCustomerMsg = `Salam ${customer.fullName}! 👋 
 This is Mani Minars Customer Logistics regarding your order #${order.id}.
-Status: ${order.status.toUpperCase()}
-Total Amount: PKR ${order.total.toLocaleString()} (${waPaymentMethod})
+Status: ${(order.status || 'PENDING').toUpperCase()}
+Total Amount: PKR ${(orderTotal ?? 0).toLocaleString()} (${waPaymentMethod})
 ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${order.paymentReference || order.payment_reference}\n` : ''}Delivery Address: ${customer.address}, ${customer.city}`;
 
                   const cleanCustomerPhone = customer.phone.replace(/[^0-9]/g, '');
-                  const isPending = order.status === 'Pending Verification' || order.status === 'pending';
-                  const isApproved = order.status === 'Approved';
-                  const isRejected = order.status === 'Rejected';
+                  const orderStatusLower = (order.status ?? '').toLowerCase();
+                  const isPending = orderStatusLower === 'pending verification' || orderStatusLower === 'pending';
+                  const isApproved = orderStatusLower === 'approved';
+                  const isRejected = orderStatusLower === 'rejected';
 
                   return (
                     <div
@@ -1290,7 +1308,10 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                       ? item.selectedColor
                                       : item.color || 'Standard');
                                   const quantity = item.quantity ?? 1;
-                                  const price = Number(item.price ?? item.unitPrice ?? item.product?.price ?? 0);
+                                  const itemPrice =
+                                    item.price ??
+                                    item.product?.price ??
+                                    0;
 
                                   return (
                                     <div
@@ -1316,7 +1337,7 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                         <div>Size: <span className="font-semibold text-neutral-800">{size}</span></div>
                                         <div>Color: <span className="font-semibold text-neutral-800">{color}</span></div>
                                         <div>Qty: <span className="font-semibold text-neutral-800">{quantity}</span></div>
-                                        <div>Price: <span className="font-bold text-neutral-900">PKR {price.toLocaleString()}</span></div>
+                                        <div>Price: <span className="font-bold text-neutral-900">PKR {(itemPrice ?? 0).toLocaleString()}</span></div>
                                       </div>
                                     </div>
                                   );
@@ -1342,7 +1363,7 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                   ? 'Meezan Bank Transfer'
                                   : order.paymentMethod === 'raast'
                                   ? 'Raast Payment (03046466815)'
-                                  : order.paymentMethod.toUpperCase()}
+                                  : String(order.paymentMethod || order.payment_method || 'BANK TRANSFER').toUpperCase()}
                               </span>
                             </div>
 
@@ -1516,7 +1537,7 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                 </span>
                                 <span className="text-[11px] text-neutral-400 hidden sm:inline">•</span>
                                 <span className="text-[11px] text-neutral-600 block sm:inline">
-                                  Total: <strong className="text-[#E84D3D] font-extrabold">PKR {order.total.toLocaleString()}</strong>
+                                  Total: <strong className="text-[#E84D3D] font-extrabold">PKR {(order.total ?? (order as any).total_amount ?? 0).toLocaleString()}</strong>
                                 </span>
                               </div>
 
@@ -1558,7 +1579,28 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-neutral-100">
-                                        {orderProducts.map((p, pIdx) => (
+                                        {orderProducts.map((p: any, pIdx) => {
+                                          const pName = p.product?.name || p.name || 'Product';
+                                          const pImage =
+                                            p.product?.image ||
+                                            p.product?.images?.[0] ||
+                                            p.image ||
+                                            FALLBACK_GARMENT_IMAGE;
+                                          const pSize = p.selectedSize || p.size || 'Standard';
+                                          const pColorName =
+                                            p.selectedColor?.name ||
+                                            (typeof p.selectedColor === 'string'
+                                              ? p.selectedColor
+                                              : p.color || p.colorName || 'Standard');
+                                          const pColorHex = p.selectedColor?.hex || p.colorHex;
+                                          const pQuantity = p.quantity ?? 1;
+                                          const itemPrice =
+                                            p.price ??
+                                            p.product?.price ??
+                                            0;
+                                          const lineTotal = p.lineTotal ?? (itemPrice * pQuantity);
+
+                                          return (
                                           <tr key={p.id || pIdx} className="hover:bg-neutral-50/50 transition-colors">
                                             {/* 1 & 2: Product Image & Product Name */}
                                             <td className="py-3 px-4">
@@ -1615,15 +1657,16 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
 
                                             {/* 6: Unit Price */}
                                             <td className="py-3 px-3 text-right font-medium text-neutral-600 font-mono text-xs">
-                                              PKR {p.unitPrice.toLocaleString()}
+                                              PKR {(itemPrice ?? 0).toLocaleString()}
                                             </td>
 
                                             {/* 7: Line Total */}
                                             <td className="py-3 px-4 text-right font-bold text-neutral-900 font-mono text-xs">
-                                              PKR {p.lineTotal.toLocaleString()}
+                                              PKR {(lineTotal ?? 0).toLocaleString()}
                                             </td>
                                           </tr>
-                                        ))}
+                                        );
+                                      })}
                                       </tbody>
                                       {/* Financial Breakdown Table Footer */}
                                       <tfoot className="bg-neutral-50/80 border-t border-neutral-200 text-xs">
@@ -1635,22 +1678,22 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                             <div className="space-y-1.5 max-w-xs ml-auto">
                                               <div className="flex justify-between text-neutral-600 text-[11px]">
                                                 <span>Items Subtotal:</span>
-                                                <span className="font-mono font-medium">PKR {order.subtotal.toLocaleString()}</span>
+                                                <span className="font-mono font-medium">PKR {(order.subtotal ?? (order as any).subtotal_amount ?? 0).toLocaleString()}</span>
                                               </div>
                                               <div className="flex justify-between text-neutral-600 text-[11px]">
                                                 <span>Delivery Fee ({order.shippingTier || 'standard'}):</span>
-                                                <span className="font-mono font-medium">PKR {order.deliveryFee.toLocaleString()}</span>
+                                                <span className="font-mono font-medium">PKR {(order.deliveryFee ?? (order as any).delivery_fee ?? (order as any).shipping_fee ?? 0).toLocaleString()}</span>
                                               </div>
-                                              {order.discount > 0 && (
+                                              {((order.discount ?? 0) > 0 || ((order as any).discount_amount ?? 0) > 0) && (
                                                 <div className="flex justify-between text-red-600 text-[11px] font-semibold">
                                                   <span>Discount {order.couponCode ? `(${order.couponCode})` : ''}:</span>
-                                                  <span className="font-mono">-PKR {order.discount.toLocaleString()}</span>
+                                                  <span className="font-mono">-PKR {(order.discount ?? (order as any).discount_amount ?? 0).toLocaleString()}</span>
                                                 </div>
                                               )}
                                               <div className="flex justify-between font-bold text-xs text-neutral-900 pt-1.5 border-t border-neutral-200">
                                                 <span>Total Amount:</span>
                                                 <span className="text-sm font-extrabold text-[#E84D3D] font-mono">
-                                                  PKR {order.total.toLocaleString()}
+                                                  PKR {(order.total ?? (order as any).total_amount ?? 0).toLocaleString()}
                                                 </span>
                                               </div>
                                             </div>
