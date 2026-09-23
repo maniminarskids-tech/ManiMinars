@@ -950,6 +950,10 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (supabase) {
       try {
         const row = orderToRow(order);
+
+        console.log('Original order:', order);
+        console.log('Order items before save:', order.items);
+        console.log('Order row:', row);
         let saveResult = await supabase.from('orders').upsert([row], { onConflict: 'order_id' });
         if (saveResult.error) {
           saveResult = await supabase.from('orders').upsert([row]);
