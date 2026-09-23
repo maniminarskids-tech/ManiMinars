@@ -931,6 +931,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Orders methods - fully integrated with Supabase and real-time syncing
   const addOrder = async (order: Order) => {
+    console.log('Supabase client:', getSupabase());
     // 1. Instantly update local state so order appears in admin panel immediately
     setOrders((prev) => [order, ...prev.filter((o) => o.id !== order.id)]);
     try {
@@ -950,7 +951,9 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (supabase) {
       try {
         const row = orderToRow(order);
+        console.log('Order row:', row);
         let saveResult = await supabase.from('orders').upsert([row], { onConflict: 'order_id' });
+        console.log('Save result:', saveResult);
         if (saveResult.error) {
           saveResult = await supabase.from('orders').upsert([row]);
         }
