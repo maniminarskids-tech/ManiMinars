@@ -64,7 +64,10 @@ export interface NormalizedOrderProduct {
 }
 
 export const extractOrderProducts = (order: any): any[] => {
+  console.log("FULL ORDER OBJECT:", order);
+
   if (!order) return [];
+
   let products = order.products_json || order.items || [];
 
   if (typeof products === "string") {
@@ -74,6 +77,8 @@ export const extractOrderProducts = (order: any): any[] => {
       products = [];
     }
   }
+
+  console.log("EXTRACTED PRODUCTS:", products);
 
   return Array.isArray(products) ? products : [];
 };
