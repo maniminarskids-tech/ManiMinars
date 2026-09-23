@@ -221,6 +221,10 @@ export const CheckoutPage: React.FC = () => {
       }
       localStorage.setItem('mani_minars_last_order_query', newOrder.id);
       localStorage.setItem('mani_minars_last_order_id', newOrder.id);
+
+      console.log('CART BEFORE ORDER:', cart);
+      console.log('NEW ORDER BEFORE SAVE:', newOrder);
+      console.log('NEW ORDER ITEMS:', newOrder.items);
       await addOrder(newOrder);
     } catch (err) {
       console.error('Error saving order:', err);

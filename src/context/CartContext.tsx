@@ -33,7 +33,7 @@ interface CartContextType {
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY = 'mani_minars_cart_v2';
-const FREE_SHIPPING_THRESHOLD = 4000;
+const FREE_SHIPPING_THRESHOLD = 5000;
 const STANDARD_DELIVERY_FEE = 250;
 const EXPRESS_DELIVERY_FEE = 450;
 
@@ -41,32 +41,32 @@ export const AVAILABLE_COUPONS: Coupon[] = [
   {
     code: 'MANI10',
     discountType: 'percentage',
-    discountValue: 10,
+    discountValue: 5,
     minOrderAmount: 0,
-    description: '10% off your entire kidswear order',
+    description: '5% off your entire kidswear order',
     isActive: true,
   },
   {
     code: 'LITTLELOOM',
     discountType: 'percentage',
-    discountValue: 15,
-    minOrderAmount: 5000,
-    description: '15% off premium cotton sets on orders above PKR 5,000',
+    discountValue: 10,
+    minOrderAmount: 7000,
+    description: '10% off premium cotton sets on orders above PKR 5,000',
     isActive: true,
   },
   {
     code: 'WELCOME500',
     discountType: 'fixed',
     discountValue: 500,
-    minOrderAmount: 4000,
-    description: 'Flat PKR 500 off on your first order above PKR 4,000',
+    minOrderAmount: 6000,
+    description: 'Flat PKR 500 off on your first order above PKR 6,000',
     isActive: true,
   },
   {
     code: 'EIDVIBES',
     discountType: 'percentage',
     discountValue: 20,
-    minOrderAmount: 7500,
+    minOrderAmount: 10000,
     maxDiscount: 2000,
     description: '20% festive discount on orders above PKR 7,500',
     isActive: true,
