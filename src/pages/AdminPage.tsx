@@ -1580,19 +1580,41 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                       </thead>
                                       <tbody className="divide-y divide-neutral-100">
                                         {orderProducts.map((p: any, pIdx) => {
-                                          const pName = p.product?.name || p.name || 'Product';
+                                          console.log("ORDER PRODUCT RAW:", p);
+                                          const pName =
+                                            p.product?.name ||
+                                            p.name ||
+                                            p.product_name ||
+                                            p.title ||
+                                            'Product';
                                           const pImage =
                                             p.product?.image ||
-                                            p.product?.images?.[0] ||
                                             p.image ||
+                                            p.product?.images?.[0] ||
+                                            (Array.isArray(p.images) ? p.images[0] : null) ||
+                                            p.image_url ||
+                                            p.product?.image_url ||
                                             FALLBACK_GARMENT_IMAGE;
-                                          const pSize = p.selectedSize || p.size || 'Standard';
+                                          const pSize =
+                                            p.selectedSize ||
+                                            p.size ||
+                                            p.selected_size ||
+                                            'Standard';
                                           const pColorName =
                                             p.selectedColor?.name ||
+                                            p.colorName ||
                                             (typeof p.selectedColor === 'string'
                                               ? p.selectedColor
-                                              : p.color || p.colorName || 'Standard');
-                                          const pColorHex = p.selectedColor?.hex || p.colorHex;
+                                              : typeof p.color === 'string'
+                                              ? p.color
+                                              : p.color?.name || 'Standard');
+                                          const pColorHex =
+                                            p.selectedColor?.hex ||
+                                            p.colorHex ||
+                                            p.color_hex ||
+                                            (typeof p.selectedColor === 'object' ? p.selectedColor?.colorHex : null) ||
+                                            (typeof p.color === 'object' ? p.color?.hex : null) ||
+                                            null;
                                           const pQuantity = p.quantity ?? 1;
                                           const itemPrice =
                                             p.price ??
@@ -1606,21 +1628,21 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                             <td className="py-3 px-4">
                                               <div className="flex items-center gap-3">
                                                 <img
-                                                  src={p.image}
-                                                  alt={p.name}
+                                                  src={pImage}
+                                                  alt={pName}
                                                   onError={(e) => {
                                                     (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
                                                   }}
                                                   className="w-13 h-13 object-cover rounded-xl border border-neutral-200 bg-neutral-100 shadow-2xs shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                                                  onClick={() => setProofModalUrl({ url: p.image, orderId: `${order.id} - ${p.name}` })}
+                                                  onClick={() => setProofModalUrl({ url: pImage, orderId: `${order.id} - ${pName}` })}
                                                   title="Click to view image preview"
                                                 />
                                                 <div className="min-w-0">
                                                   <span className="font-bold text-neutral-900 text-xs block leading-snug">
-                                                    {p.name}
+                                                    {pName}
                                                   </span>
                                                   <span className="text-[10px] text-neutral-400 mt-0.5 block">
-                                                    Item #{pIdx + 1}
+                                                    {p.sku || p.product?.sku ? `SKU: ${p.sku || p.product?.sku}` : pName}
                                                   </span>
                                                 </div>
                                               </div>
@@ -1629,22 +1651,22 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                             {/* 3: Selected Size */}
                                             <td className="py-3 px-3">
                                               <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-xs bg-neutral-100 text-neutral-800 border border-neutral-200/80">
-                                                {p.size}
+                                                {pSize}
                                               </span>
                                             </td>
 
                                             {/* 4: Selected Color */}
                                             <td className="py-3 px-3">
                                               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-neutral-50 text-neutral-800 border border-neutral-200">
-                                                {p.colorHex ? (
+                                                {pColorHex ? (
                                                   <span
                                                     className="w-3.5 h-3.5 rounded-full border border-black/15 shadow-2xs shrink-0"
-                                                    style={{ backgroundColor: p.colorHex }}
+                                                    style={{ backgroundColor: pColorHex }}
                                                   />
                                                 ) : (
                                                   <span className="w-3 h-3 rounded-full bg-neutral-400 shrink-0" />
                                                 )}
-                                                <span>{p.colorName}</span>
+                                                <span>{pColorName}</span>
                                               </div>
                                             </td>
 
