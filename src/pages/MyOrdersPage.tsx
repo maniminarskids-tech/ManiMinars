@@ -33,25 +33,10 @@ import {
   formatOrderDate,
   FALLBACK_GARMENT_IMAGE,
   NormalizedOrderProduct,
+  normalizeOrderProducts,
 } from '../utils/orderUtils';
 import { getSupabase } from '../services/supabase';
 
-export const extractOrderProducts = (order: any): any[] => {
-  if (!order) return [];
-  let products = order.products_json || order.items || [];
-
-  if (typeof products === "string") {
-    try {
-      products = JSON.parse(products);
-    } catch {
-      products = [];
-    }
-  }
-
-  return Array.isArray(products) ? products : [];
-};
-
-export const getOrderItems = extractOrderProducts;
 
 // Visual timeline steps
 const TIMELINE_STEPS = [
@@ -663,7 +648,7 @@ export default function MyOrdersPage() {
             </div>
 
             {filteredOrders.map((order) => {
-              const orderProducts = extractOrderProducts(order);
+              const orderProducts = normalizeOrderProducts(order);
 
               console.log("ORDER ITEMS:", order.items);
               console.log("ORDER PRODUCTS_JSON:", order.products_json);

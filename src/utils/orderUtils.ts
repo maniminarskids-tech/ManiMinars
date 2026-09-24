@@ -256,3 +256,93 @@ export function formatOrderDate(dateString?: string): string {
     return dateString;
   }
 }
+/**
+ * Converts full CartItem[] into a lightweight payload
+ * so products_json never becomes huge / corrupted.
+ */
+export function toLightweightOrderItems(items: any[]): any[] {
+  if (!Array.isArray(items)) return [];
+
+  return items.map((item, index) => {
+    const product = item.product || {};
+    const selectedColor = item.selectedColor || {};
+
+    const image =
+      selectedColor.image ||
+      product.images?.[0] ||
+      product.image ||
+      item.image ||
+      FALLBACK_GARMENT_IMAGE;
+
+    const unitPrice = Number(item.price ?? product.price ?? 0);
+    const quantity = Math.max(1, Number(item.quantity ?? 1));
+
+    return {
+      id: item.id || `item-${index}`,
+      productId: item.productId || product.id || '',
+      name: product.name || item.name || `Product #${index + 1}`,
+      image: typeof image === 'string' ? image : FALLBACK_GARMENT_IMAGE,
+      selectedSize: item.selectedSize || item.size || 'Standard',
+      selectedColor: {
+        name: selectedColor.name || item.colorName || 'Standard',
+        hex: selectedColor.hex || undefined,
+      },
+      quantity,
+      unitPrice,
+      price: unitPrice,
+      lineTotal: unitPrice * quantity,
+    };
+  });
+}
+
+/**
+ * Uploads payment proof image to Supabase Storage and returns public URL.
+ * Falls back to null if upload fails (never stores huge base64).
+ */
+export async function uploadPaymentProof(
+  base64OrFile: string | File,
+  orderId: string
+): Promise<string | null> {
+  try {
+    const { getSupabase } = await import('../services/supabase');
+    const supabase = getSupabase();
+    if (!supabase) return null;
+
+    let blob: Blob;
+    let ext = 'jpg';
+
+    if (typeof base64OrFile === 'string') {
+      const matches = base64OrFile.match(/^data:(image\/\w+);base64,(.+)$/);
+      if (!matches) return null;
+      const mime = matches[1];
+      ext = mime.split('/')[1] || 'jpg';
+      const binary = atob(matches[2]);
+      const array = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
+      blob = new Blob([array], { type: mime });
+    } else {
+      blob = base64OrFile;
+      ext = base64OrFile.name.split('.').pop() || 'jpg';
+    }
+
+    const fileName = `proofs/${orderId}-${Date.now()}.${ext}`;
+
+    const { error } = await supabase.storage
+      .from('payment-proofs')
+      .upload(fileName, blob, {
+        contentType: blob.type,
+        upsert: true,
+      });
+
+    if (error) {
+      console.error('Payment proof upload failed:', error.message);
+      return null;
+    }
+
+    const { data } = supabase.storage.from('payment-proofs').getPublicUrl(fileName);
+    return data?.publicUrl || null;
+  } catch (err) {
+    console.error('uploadPaymentProof error:', err);
+    return null;
+  }
+}

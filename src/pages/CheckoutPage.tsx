@@ -8,6 +8,7 @@ import { useCart } from '../context/CartContext';
 import { useProducts, FALLBACK_GARMENT_IMAGE } from '../context/ProductContext';
 import { MANI_MINARS_WHATSAPP_NUMBER } from '../utils/whatsapp';
 import { Order, PaymentMethod } from '../types';
+import { toLightweightOrderItems, uploadPaymentProof } from '../utils/orderUtils';
 import {
   ShieldCheck,
   CheckCircle2,
@@ -123,116 +124,99 @@ export const CheckoutPage: React.FC = () => {
   };
 
   const handleSubmitOrder = async (e: React.FormEvent) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    // Validate customer form fields
-    if (!formData.fullName.trim() || !formData.phone.trim() || !formData.address.trim() || !formData.city.trim()) {
-      setPaymentError('Please fill in all required customer details (Full Name, Phone Number, City, and Delivery Address).');
-      return;
-    }
+  if (!formData.fullName.trim() || !formData.phone.trim() || !formData.address.trim() || !formData.city.trim()) {
+    setPaymentError('Please fill in all required customer details (Full Name, Phone Number, City, and Delivery Address).');
+    return;
+  }
 
-    // Strict validation: Require payment proof or reference number
-    const trimmedRef = paymentReference.trim();
-    if (!trimmedRef && !paymentScreenshot) {
-      setPaymentError(
-        'Payment proof is required. Please enter your Payment Reference / Transaction ID or upload a screenshot of your transfer.'
-      );
-      // Scroll to payment section
-      const elem = document.getElementById('payment-method-section');
-      if (elem) {
-        elem.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      return;
-    }
+  const trimmedRef = paymentReference.trim();
+  if (!trimmedRef && !paymentScreenshot) {
+    setPaymentError(
+      'Payment proof is required. Please enter your Payment Reference / Transaction ID or upload a screenshot of your transfer.'
+    );
+    const elem = document.getElementById('payment-method-section');
+    if (elem) elem.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
 
-    setPaymentError('');
-    setIsProcessing(true);
+  setPaymentError('');
+  setIsProcessing(true);
 
-    const generatedId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
-    setOrderId(generatedId);
-    setSubmittedReference(trimmedRef);
-    setSubmittedScreenshot(paymentScreenshot);
+  const generatedId = `MM-${Math.floor(100000 + Math.random() * 900000)}`;
+  setOrderId(generatedId);
+  setSubmittedReference(trimmedRef);
 
-    const snapshotCustomer = {
-      fullName: formData.fullName.trim(),
-      phone: formData.phone.trim(),
-      email: formData.email.trim(),
-      city: formData.city.trim(),
-      address: formData.address.trim(),
-      notes: formData.notes.trim() || undefined,
-    };
-    setSubmittedCustomer(snapshotCustomer);
+  const snapshotCustomer = {
+    fullName: formData.fullName.trim(),
+    phone: formData.phone.trim(),
+    email: formData.email.trim(),
+    city: formData.city.trim(),
+    address: formData.address.trim(),
+    notes: formData.notes.trim() || undefined,
+  };
+  setSubmittedCustomer(snapshotCustomer);
 
-    // Save phone for My Orders lookup so order persists across refresh & browser restart
+  try {
     if (snapshotCustomer.phone) {
-      try {
-        localStorage.setItem('mm_customer_phone', snapshotCustomer.phone);
-        localStorage.setItem('mani_minars_customer_phone', snapshotCustomer.phone);
-      } catch {
-        // ignore
-      }
+      localStorage.setItem('mm_customer_phone', snapshotCustomer.phone);
+      localStorage.setItem('mani_minars_customer_phone', snapshotCustomer.phone);
     }
+    localStorage.setItem('mani_minars_last_order_query', generatedId);
+    localStorage.setItem('mani_minars_last_order_id', generatedId);
+  } catch {}
 
-    // Save order to Supabase immediately with payment reference & screenshot
-    const newOrder: Order = {
-      id: generatedId,
-      createdAt: new Date().toISOString(),
-      customer: {
-        fullName: snapshotCustomer.fullName,
-        phone: `+92${snapshotCustomer.phone.replace(/^0+/, '')}`,
-        email: snapshotCustomer.email,
-        city: snapshotCustomer.city,
-        address: snapshotCustomer.address,
-        notes: snapshotCustomer.notes,
-      },
-      items: [...cart],
-      subtotal,
-      deliveryFee,
-      discount,
-      total,
-      paymentMethod,
-      paymentReference: trimmedRef || undefined,
-      paymentProofImage: paymentScreenshot || undefined,
-      paymentStatus: 'pending',
-      shippingTier,
-      couponCode: promoCode || undefined,
-      status: 'Pending Verification',
-      courier: deliverySettings.courierName,
-    };
+  // Upload payment proof to Storage (no more huge base64)
+  let proofUrl: string | undefined = undefined;
+  if (paymentScreenshot) {
+    const uploaded = await uploadPaymentProof(paymentScreenshot, generatedId);
+    if (uploaded) {
+      proofUrl = uploaded;
+      setSubmittedScreenshot(uploaded);
+    } else {
+      console.warn('Payment proof upload failed, continuing without image URL');
+    }
+  }
 
-    // FIX #2 Requirement 7: After successful order placement, clear all fields
-    setFormData({
-      fullName: '',
-      phone: '',
-      email: '',
-      city: '',
-      address: '',
-      notes: '',
-    });
+  // Lightweight products only
+  const lightItems = toLightweightOrderItems(cart);
+
+  const newOrder: Order = {
+    id: generatedId,
+    createdAt: new Date().toISOString(),
+    customer: {
+      fullName: snapshotCustomer.fullName,
+      phone: `+92${snapshotCustomer.phone.replace(/^0+/, '')}`,
+      email: snapshotCustomer.email,
+      city: snapshotCustomer.city,
+      address: snapshotCustomer.address,
+      notes: snapshotCustomer.notes,
+    },
+    items: lightItems as any,
+    subtotal,
+    deliveryFee,
+    discount,
+    total,
+    paymentMethod,
+    paymentReference: trimmedRef || undefined,
+    paymentProofImage: proofUrl,
+    paymentStatus: 'pending',
+    shippingTier,
+    couponCode: promoCode || undefined,
+    status: 'Pending Verification',
+    courier: deliverySettings.courierName,
+  };
+
+  try {
+    await addOrder(newOrder);
+
+    // Success → clear form
+    setFormData({ fullName: '', phone: '', email: '', city: '', address: '', notes: '' });
     setPaymentReference('');
     setPaymentScreenshot(null);
     setScreenshotFileName('');
 
-    // Save immediately to Supabase and local cache
-    try {
-      if (newOrder.customer?.phone) {
-        localStorage.setItem('mm_customer_phone', newOrder.customer.phone);
-        localStorage.setItem('mani_minars_customer_phone', newOrder.customer.phone);
-      }
-      localStorage.setItem('mani_minars_last_order_query', newOrder.id);
-      localStorage.setItem('mani_minars_last_order_id', newOrder.id);
-
-      console.log('CART BEFORE ORDER:', cart);
-      console.log('NEW ORDER BEFORE SAVE:', newOrder);
-      console.log('NEW ORDER ITEMS:', newOrder.items);
-      console.log('CART LENGTH:', cart.length);
-      
-      await addOrder(newOrder);
-    } catch (err) {
-      console.error('Error saving order:', err);
-    }
-
-    // Micro-animation: Trigger button success checkmark state and subtle celebration
     setIsProcessing(false);
     setIsSubmittedSuccess(true);
 
@@ -244,17 +228,21 @@ export const CheckoutPage: React.FC = () => {
         colors: ['#10B981', '#E84D3D', '#F5BE38'],
         disableForReducedMotion: true,
       });
-    } catch {
-      // ignore
-    }
+    } catch {}
 
-    // Smooth transition: Allow the customer to clearly perceive the checkmark feedback before swapping views
     setTimeout(() => {
       setOrderComplete(true);
       clearCart();
     }, 800);
-  };
-
+  } catch (err: any) {
+    console.error('Order save failed:', err);
+    setIsProcessing(false);
+    setPaymentError(
+      err?.message ||
+        'Order save nahi ho saka. Internet check karein ya thori der baad try karein. Cart clear nahi hua.'
+    );
+  }
+};
   // Order Complete Screen
   if (orderComplete) {
     const paymentMethodLabel =
