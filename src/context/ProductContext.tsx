@@ -610,7 +610,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Supabase query: select("*") returning all rows without limit, date, status, or customer filters
       const { data: rows, error } = await supabase
         .from('orders')
-        .select('order_id, customer_name, phone, total_amount, status, created_at, items, products_json, customer, address, city, notes, payment_reference, payment_proof_url, shipping_tier, courier')
+        .select('id, order_id, customer_name, phone, total_amount, status, created_at, items, products_json, customer, address, city, notes, payment_reference, payment_proof_url, shipping_tier, courier')
         .order('created_at', { ascending: false });
 
       console.log("RAW SUPABASE ORDERS:", rows);
