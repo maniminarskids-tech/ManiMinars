@@ -225,6 +225,8 @@ export const CheckoutPage: React.FC = () => {
       console.log('CART BEFORE ORDER:', cart);
       console.log('NEW ORDER BEFORE SAVE:', newOrder);
       console.log('NEW ORDER ITEMS:', newOrder.items);
+      console.log('CART LENGTH:', cart.length);
+      
       await addOrder(newOrder);
     } catch (err) {
       console.error('Error saving order:', err);
