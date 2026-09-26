@@ -616,9 +616,7 @@ const [isOrdersLoading, setIsOrdersLoading] =
 
     const { data: rows, error } = await supabase
   .from('orders')
-  .select(
-    'id, order_id, customer_name, phone, email, address, city, notes, subtotal, delivery_fee, discount, total_amount, total, payment_method, payment_reference, payment_status, shipping_tier, coupon_code, status, tracking_number, courier, created_at, updated_at'
-  )
+  .select('id, order_id, customer_name, phone, email, address, city, notes, items, products_json, subtotal, delivery_fee, discount, total_amount, total, payment_method, payment_reference, payment_proof_url, payment_status, shipping_tier, coupon_code, status, tracking_number, courier, created_at, updated_at')
   .order('created_at', { ascending: false })
   .limit(50);
 
