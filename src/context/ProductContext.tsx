@@ -554,166 +554,208 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     saveToLocalCache(products);
   }, [products, saveToLocalCache]);
 
-  // 4. Orders state: initialize from local cache safely without purging valid orders
-  const [orders, setOrders] = useState<Order[]>(() => {
-    try {
-      const stored = localStorage.getItem('mani_minars_orders_v1');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Keep all valid orders (filter out empty corrupt entries instead of nuking entire cache)
-          const validOrders = parsed.filter(
-            (o: any) =>
-              o &&
-              (o.id || o.order_id) &&
-              ((Array.isArray(o.items) && o.items.length > 0) ||
-                (Array.isArray(o.products_json) && o.products_json.length > 0) ||
-                (typeof o.products_json === 'string' && o.products_json.length > 2))
-          );
-          if (validOrders.length > 0) {
-            return validOrders;
-          }
+         // 4. Orders state: initialize from local cache safely without purging valid orders
+const [orders, setOrders] = useState<Order[]>(() => {
+  try {
+    const stored = localStorage.getItem('mani_minars_orders_v1');
+
+    if (stored) {
+      const parsed = JSON.parse(stored);
+
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const validOrders = parsed.filter(
+          (o: any) => Boolean(o && (o.id || o.order_id))
+        );
+
+        if (validOrders.length > 0) {
+          return validOrders;
         }
       }
-    } catch (e) {
-      console.error('Error loading orders from storage', e);
     }
-    return INITIAL_ORDERS;
-  });
+  } catch (e) {
+    console.error('Error loading orders from storage:', e);
+  }
 
-  const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(false);
+  return INITIAL_ORDERS;
+});
+
+const [isOrdersLoading, setIsOrdersLoading] =
+  useState<boolean>(false);
 
   // Fetch orders from Supabase orders table (Supabase data always overrides localStorage cache)
   const refreshOrders = useCallback(async () => {
-    let cachedOrders: Order[] = [];
-    try {
-      const stored = localStorage.getItem('mani_minars_orders_v1');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          cachedOrders = parsed;
-        }
-      }
-    } catch (e) {
-      console.error('Error reading cached orders:', e);
-    }
-    console.log("LOCAL STORAGE ORDERS:", cachedOrders);
+  let cachedOrders: Order[] = [];
 
-    const supabase = getSupabase();
-    if (!supabase) {
-      const fallbackOrders = cachedOrders.length > 0 ? cachedOrders : INITIAL_ORDERS;
-      console.log("FINAL ORDERS STATE:", fallbackOrders);
+  try {
+    const stored = localStorage.getItem('mani_minars_orders_v1');
+
+    if (stored) {
+      const parsed = JSON.parse(stored);
+
+      if (Array.isArray(parsed)) {
+        cachedOrders = parsed.filter(
+          (o: any) => o && (o.id || o.order_id)
+        );
+      }
+    }
+  } catch (e) {
+    console.error('Error reading cached orders:', e);
+  }
+
+  const supabase = getSupabase();
+
+  if (!supabase) {
+    setOrders((prev) =>
+      prev.length > 0 ? prev : cachedOrders
+    );
+    return;
+  }
+
+  try {
+    setIsOrdersLoading(true);
+
+    const { data: rows, error } = await supabase
+  .from('orders')
+  .select(
+    'id, order_id, customer_name, phone, email, address, city, notes, subtotal, delivery_fee, discount, total_amount, total, payment_method, payment_reference, payment_status, shipping_tier, coupon_code, status, tracking_number, courier, created_at, updated_at'
+  )
+  .order('created_at', { ascending: false })
+  .limit(50);
+
+    if (error) {
+      console.error(
+        'Supabase orders fetch error:',
+        error
+      );
+
+      setOrders((prev) =>
+        prev.length > 0 ? prev : cachedOrders
+      );
+
       return;
     }
 
-    try {
-      setIsOrdersLoading(true);
-      // Supabase query: select("*") returning all rows without limit, date, status, or customer filters
-      const { data: rows, error } = await supabase
-        .from('orders')
-        .select('id, order_id, customer_name, phone, total_amount, status, created_at, items, products_json, customer, address, city, notes, payment_reference, payment_proof_url, shipping_tier, courier')
-        .order('created_at', { ascending: false });
+    const mappedOrders = Array.isArray(rows)
+      ? rows.map(rowToOrder)
+      : [];
 
-      console.log("RAW SUPABASE ORDERS:", rows);
+    const remoteIds = new Set(
+      mappedOrders.map((o) => o.id)
+    );
 
-      if (error) {
-        console.warn('Supabase orders fetch notice:', error.message);
-        console.log("FINAL ORDERS STATE:", cachedOrders.length > 0 ? cachedOrders : orders);
-        return;
-      }
+    const pendingLocalOrders = cachedOrders.filter(
+      (localOrder) => {
+        if (!localOrder?.id) return false;
+        if (remoteIds.has(localOrder.id)) return false;
 
-      if (rows && Array.isArray(rows)) {
-        const mappedOrders = rows.map(rowToOrder);
-        console.log("MAPPED ORDERS:", mappedOrders);
+        const items =
+          localOrder.items ||
+          localOrder.products_json ||
+          [];
 
-        // Merge Supabase orders with any freshly placed local order not yet replicated to Supabase
-        const remoteIds = new Set(mappedOrders.map((o) => o.id));
-        const pendingLocalOrders = (Array.isArray(cachedOrders) ? cachedOrders : []).filter(
-          (localOrder) => {
-            if (!localOrder || !localOrder.id) return false;
-            if (remoteIds.has(localOrder.id)) return false;
-            // Ignore default mock orders if Supabase returned real store orders
-            if (mappedOrders.length > 0 && ['MM-94821', 'MM-94822', 'MM-94823'].includes(localOrder.id)) {
-              return false;
-            }
-            const items = localOrder.items || localOrder.products_json || [];
-            return Array.isArray(items) && items.length > 0;
-          }
+        return (
+          Array.isArray(items) &&
+          items.length > 0
         );
-
-        const finalOrders = [...mappedOrders, ...pendingLocalOrders];
-        console.log("FINAL ORDERS STATE:", finalOrders);
-
-        setOrders(finalOrders);
-        try {
-          if (finalOrders.length > 0) {
-            localStorage.setItem('mani_minars_orders_v1', JSON.stringify(finalOrders));
-          }
-        } catch (err) {
-          console.error('Error caching remote orders:', err);
-        }
-
-        // Background sync: If any newly placed local order was missing from Supabase, persist it now
-        if (pendingLocalOrders.length > 0) {
-          for (const pendingOrder of pendingLocalOrders) {
-            try {
-              const row = orderToRow(pendingOrder);
-              let syncRes = await supabase.from('orders').upsert([row], { onConflict: 'order_id' });
-              if (syncRes.error) {
-                syncRes = await supabase.from('orders').upsert([row]);
-              }
-              if (syncRes.error) {
-                await supabase.from('orders').insert([row]);
-              }
-            } catch (syncErr) {
-              console.warn('Background sync of pending order failed:', syncErr);
-            }
-          }
-        }
       }
-    } catch (err) {
-      console.error('Failed to sync orders with Supabase:', err);
-      console.log("FINAL ORDERS STATE:", orders);
-    } finally {
-      setIsOrdersLoading(false);
+    );
+
+    const finalOrders = [
+      ...mappedOrders,
+      ...pendingLocalOrders,
+    ];
+
+    setOrders(finalOrders);
+
+    try {
+      localStorage.setItem(
+        'mani_minars_orders_v1',
+        JSON.stringify(finalOrders)
+      );
+    } catch (cacheError) {
+      console.error(
+        'Error caching orders:',
+        cacheError
+      );
     }
-  }, [orders]);
+  } catch (err) {
+    console.error(
+      'Failed to sync orders with Supabase:',
+      err
+    );
+
+    setOrders((prev) =>
+      prev.length > 0 ? prev : cachedOrders
+    );
+  } finally {
+    setIsOrdersLoading(false);
+  }
+}, []);
 
   // Subscribe to real-time order creations and updates from other devices / admin
-  useEffect(() => {
-    refreshOrders();
+useEffect(() => {
+  refreshOrders();
 
-    const supabase = getSupabase();
-    if (!supabase) return;
+  const supabase = getSupabase();
+  if (!supabase) {
+    return;
+  }
 
-    const channel = supabase
-      .channel('public:orders')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        (payload) => {
-          if (payload.eventType === 'INSERT' && payload.new) {
-            const newOrder = rowToOrder(payload.new);
-            setOrders((prev) => {
-              if (prev.some((o) => o.id === newOrder.id)) {
-                return prev.map((o) => (o.id === newOrder.id ? newOrder : o));
-              }
-              return [newOrder, ...prev];
-            });
-          } else if (payload.eventType === 'UPDATE' && payload.new) {
-            const updated = rowToOrder(payload.new);
-            setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
-          } else if (payload.eventType === 'DELETE' && payload.old) {
-            setOrders((prev) => prev.filter((o) => o.id !== payload.old.id));
-          }
+  const channel = supabase
+    .channel('public:orders')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'orders',
+      },
+      (payload) => {
+        if (payload.eventType === 'INSERT' && payload.new) {
+          const newOrder = rowToOrder(payload.new);
+
+          setOrders((prev) => {
+            const exists = prev.some(
+              (o) => o.id === newOrder.id
+            );
+
+            if (exists) {
+              return prev.map((o) =>
+                o.id === newOrder.id ? newOrder : o
+              );
+            }
+
+            return [newOrder, ...prev];
+          });
+        } else if (
+          payload.eventType === 'UPDATE' &&
+          payload.new
+        ) {
+          const updated = rowToOrder(payload.new);
+
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === updated.id ? updated : o
+            )
+          );
+        } else if (
+          payload.eventType === 'DELETE' &&
+          payload.old
+        ) {
+          setOrders((prev) =>
+            prev.filter(
+              (o) => o.id !== payload.old.id
+            )
+          );
         }
-      )
-      .subscribe();
+      }
+    )
+    .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [refreshOrders]);
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [refreshOrders]);
 
   // 5. Delivery Settings state
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>(() => {
@@ -931,79 +973,188 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // Orders methods - fully integrated with Supabase and real-time syncing
-  const addOrder = async (order: Order) => {
-  // Always store lightweight version
-  const lightOrder: Order = {
+const addOrder = async (order: Order) => {
+  // Keep the original order exactly as received from CheckoutPage.
+  // Do NOT convert/strip the product items here.
+  const orderToSave: Order = {
     ...order,
-    items: toLightweightOrderItems(order.items || []) as any,
+    items: Array.isArray(order.items) ? order.items : [],
   };
 
-  // 1. Instant local update
-  setOrders((prev) => [lightOrder, ...prev.filter((o) => o.id !== lightOrder.id)]);
+  // 1. Instantly update local state
+  setOrders((prev) => [
+    orderToSave,
+    ...prev.filter((o) => o.id !== orderToSave.id),
+  ]);
 
+  // 2. Save local backup
   try {
     const stored = localStorage.getItem('mani_minars_orders_v1');
-    const currentList: Order[] = stored ? JSON.parse(stored) : [];
-    const updatedList = [lightOrder, ...currentList.filter((o) => o.id !== lightOrder.id)];
-    localStorage.setItem('mani_minars_orders_v1', JSON.stringify(updatedList));
+    const currentList: Order[] = stored
+      ? JSON.parse(stored)
+      : [];
+
+    const updatedList = [
+      orderToSave,
+      ...currentList.filter((o) => o.id !== orderToSave.id),
+    ];
+
+    localStorage.setItem(
+      'mani_minars_orders_v1',
+      JSON.stringify(updatedList)
+    );
   } catch (e) {
     console.error('Error caching order locally:', e);
   }
 
-  // 2. Reduce stock
-  await reduceStockForOrder(lightOrder);
+  // 3. Reduce stock using the original order items
+  await reduceStockForOrder(orderToSave);
 
-  // 3. Save to Supabase
+  // 4. Save the complete order to Supabase
   const supabase = getSupabase();
+
   if (!supabase) {
-    throw new Error('Supabase configured nahi hai. Order local save ho gaya lekin server pe nahi gaya.');
+    console.error(
+      'Supabase client is not configured. Order remains in local storage:',
+      orderToSave.id
+    );
+    return;
   }
 
-  const row = orderToRow(lightOrder);
+  try {
+    const row = orderToRow(orderToSave);
 
-  let saveResult = await supabase.from('orders').upsert([row], { onConflict: 'order_id' });
+    // Primary save: upsert by order_id
+    let saveResult = await supabase
+      .from('orders')
+      .upsert([row], {
+        onConflict: 'order_id',
+      });
 
-  if (saveResult.error) {
-    saveResult = await supabase.from('orders').upsert([row]);
-  }
-  if (saveResult.error) {
-    saveResult = await supabase.from('orders').insert([row]);
-  }
+    // Fallback 1: normal upsert
+    if (saveResult.error) {
+      console.warn(
+        'Order upsert with onConflict failed:',
+        saveResult.error.message
+      );
 
-  if (saveResult.error) {
-    // Last fallback – still lightweight
-    const coreRow = {
-      order_id: lightOrder.id,
-      customer_name: lightOrder.customer?.fullName || '',
-      phone: lightOrder.customer?.phone || '',
-      email: lightOrder.customer?.email || '',
-      address: lightOrder.customer?.address || '',
-      city: lightOrder.customer?.city || '',
-      notes: lightOrder.customer?.notes || null,
-      products_json: lightOrder.items || [],
-      items: lightOrder.items || [],
-      subtotal: lightOrder.subtotal,
-      delivery_fee: lightOrder.deliveryFee,
-      discount: lightOrder.discount || 0,
-      total_amount: lightOrder.total,
-      total: lightOrder.total,
-      payment_method: lightOrder.paymentMethod,
-      payment_reference: lightOrder.paymentReference || null,
-      payment_proof_url: lightOrder.paymentProofImage || null,
-      payment_proof_image: lightOrder.paymentProofImage || null,
-      status: lightOrder.status || 'Pending Verification',
-      created_at: lightOrder.createdAt || new Date().toISOString(),
-    };
-
-    const coreRes = await supabase.from('orders').insert([coreRow]);
-    if (coreRes.error) {
-      console.error('Core order insert failed:', coreRes.error.message);
-      throw new Error(coreRes.error.message || 'Order save fail ho gaya');
+      saveResult = await supabase
+        .from('orders')
+        .upsert([row]);
     }
-  }
 
-  console.info('Order successfully saved to Supabase:', lightOrder.id);
-  await refreshOrders();
+    // Fallback 2: plain insert
+    if (saveResult.error) {
+      console.warn(
+        'Order upsert failed, trying plain insert:',
+        saveResult.error.message
+      );
+
+      saveResult = await supabase
+        .from('orders')
+        .insert([row]);
+    }
+
+    // Final fallback: save all important order fields directly
+    if (saveResult.error) {
+      console.warn(
+        'Full order save failed, trying core order insert:',
+        saveResult.error.message
+      );
+
+      const coreRow = {
+        order_id: orderToSave.id,
+        id: orderToSave.id,
+
+        customer_name:
+          orderToSave.customer?.fullName || '',
+        phone:
+          orderToSave.customer?.phone || '',
+        email:
+          orderToSave.customer?.email || '',
+        address:
+          orderToSave.customer?.address || '',
+        city:
+          orderToSave.customer?.city || '',
+        notes:
+          orderToSave.customer?.notes || null,
+        customer:
+          orderToSave.customer || null,
+
+        // IMPORTANT: preserve actual order products
+        items: orderToSave.items || [],
+        products_json: orderToSave.items || [],
+
+        subtotal:
+          Number(orderToSave.subtotal) || 0,
+        delivery_fee:
+          Number(orderToSave.deliveryFee) || 0,
+        discount:
+          Number(orderToSave.discount) || 0,
+        total_amount:
+          Number(orderToSave.total) || 0,
+        total:
+          Number(orderToSave.total) || 0,
+
+        payment_method:
+          orderToSave.paymentMethod || 'bank_transfer',
+        payment_reference:
+          orderToSave.paymentReference || null,
+        payment_proof_url:
+          orderToSave.paymentProofImage || null,
+        payment_proof_image:
+          orderToSave.paymentProofImage || null,
+        payment_status:
+          orderToSave.paymentStatus || 'pending',
+
+        shipping_tier:
+          orderToSave.shippingTier || 'standard',
+        coupon_code:
+          orderToSave.couponCode || null,
+        status:
+          orderToSave.status || 'Pending Verification',
+        tracking_number:
+          orderToSave.trackingNumber || null,
+        courier:
+          orderToSave.courier || null,
+
+        created_at:
+          orderToSave.createdAt ||
+          new Date().toISOString(),
+        updated_at:
+          new Date().toISOString(),
+      };
+
+      const coreRes = await supabase
+        .from('orders')
+        .insert([coreRow]);
+
+      if (coreRes.error) {
+        console.error(
+          'Core order insert failed:',
+          coreRes.error.message
+        );
+
+        throw new Error(
+          coreRes.error.message || 'Order save failed'
+        );
+      }
+    }
+
+    console.info(
+      'Order successfully saved to Supabase:',
+      orderToSave.id
+    );
+
+    // Refresh once after successful save
+    await refreshOrders();
+  } catch (err) {
+    console.error(
+      'Error saving order to Supabase:',
+      err
+    );
+    throw err;
+  }
 };
 
   const approveOrder = async (orderId: string) => {

@@ -180,7 +180,23 @@ export const CheckoutPage: React.FC = () => {
   }
 
   // Lightweight products only
-  const lightItems = toLightweightOrderItems(cart);
+  if (!Array.isArray(cart) || cart.length === 0) {
+  setPaymentError(
+    'Your cart is empty. Please add a product before placing the order.'
+  );
+  setIsProcessing(false);
+  return;
+}
+
+const lightItems = toLightweightOrderItems(cart);
+
+if (lightItems.length === 0) {
+  setPaymentError(
+    'Order products could not be prepared. Please return to cart and try again.'
+  );
+  setIsProcessing(false);
+  return;
+}
 
   const newOrder: Order = {
     id: generatedId,
@@ -193,7 +209,7 @@ export const CheckoutPage: React.FC = () => {
       address: snapshotCustomer.address,
       notes: snapshotCustomer.notes,
     },
-    items: lightItems as any,
+    items: lightItems,
     subtotal,
     deliveryFee,
     discount,
