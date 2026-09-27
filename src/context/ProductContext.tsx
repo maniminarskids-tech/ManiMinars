@@ -1207,23 +1207,84 @@ const addOrder = async (order: Order) => {
 };
 
   const approveOrder = async (orderId: string) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: 'Approved' } : o))
-    );
+  // Update local UI immediately
+  setOrders((prev) =>
+    prev.map((o) =>
+      o.id === orderId
+        ? { ...o, status: 'Approved' }
+        : o
+    )
+  );
 
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        const updatePayload = { status: 'Approved', updated_at: new Date().toISOString() };
-        const res = await supabase.from('orders').update(updatePayload).eq('order_id', orderId);
-        if (res.error) {
-          await supabase.from('orders').update(updatePayload).eq('id', orderId);
-        }
-      } catch (err) {
-        console.error('Error approving order in Supabase:', err);
+  const supabase = getSupabase();
+
+  if (!supabase) {
+    return;
+  }
+
+  try {
+    const updatePayload = {
+      status: 'Approved',
+      updated_at: new Date().toISOString(),
+    };
+
+    // First try the order_id column
+    const firstUpdate = await supabase
+      .from('orders')
+      .update(updatePayload)
+      .eq('order_id', orderId)
+      .select('id, order_id, status');
+
+    if (firstUpdate.error) {
+      console.error(
+        'Supabase approve update error:',
+        firstUpdate.error
+      );
+    }
+
+    // If order_id did not update any row, try the id column
+    if (
+      !firstUpdate.error &&
+      (!firstUpdate.data ||
+        firstUpdate.data.length === 0)
+    ) {
+      const secondUpdate = await supabase
+        .from('orders')
+        .update(updatePayload)
+        .eq('id', orderId)
+        .select('id, order_id, status');
+
+      if (secondUpdate.error) {
+        console.error(
+          'Supabase approve fallback update error:',
+          secondUpdate.error
+        );
+      }
+
+      if (
+        !secondUpdate.error &&
+        (!secondUpdate.data ||
+          secondUpdate.data.length === 0)
+      ) {
+        console.error(
+          'Approve failed: no Supabase order row matched order ID:',
+          orderId
+        );
       }
     }
-  };
+
+    // Re-sync local state from Supabase
+    await refreshOrders();
+  } catch (err) {
+    console.error(
+      'Error approving order in Supabase:',
+      err
+    );
+
+    // Restore latest remote/local state after failure
+    await refreshOrders();
+  }
+};
 
   const rejectOrder = async (orderId: string) => {
     setOrders((prev) =>
