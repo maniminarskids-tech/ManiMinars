@@ -582,8 +582,9 @@ const [orders, setOrders] = useState<Order[]>(() => {
 const [isOrdersLoading, setIsOrdersLoading] =
   useState<boolean>(false);
 
-  // Fetch orders from Supabase orders table (Supabase data always overrides localStorage cache)
-  const refreshOrders = useCallback(async () => {
+  // Fetch orders from Supabase orders table
+// Keep the main list query lightweight to avoid Supabase statement timeouts.
+const refreshOrders = useCallback(async () => {
   let cachedOrders: Order[] = [];
 
   try {
@@ -614,11 +615,13 @@ const [isOrdersLoading, setIsOrdersLoading] =
   try {
     setIsOrdersLoading(true);
 
-    const { data: rows, error } = await supabase
+   const { data: rows, error } = await supabase
   .from('orders')
-  .select('id, order_id, customer_name, phone, email, address, city, notes, items, products_json, subtotal, delivery_fee, discount, total_amount, total, payment_method, payment_reference, payment_proof_url, payment_status, shipping_tier, coupon_code, status, tracking_number, courier, created_at, updated_at')
+  .select(
+    'id, order_id, customer_name, phone, total_amount, payment_method, payment_reference, status, created_at, items'
+  )
   .order('created_at', { ascending: false })
-  .limit(50);
+  .limit(20);
 
     if (error) {
       console.error(
@@ -633,22 +636,70 @@ const [isOrdersLoading, setIsOrdersLoading] =
       return;
     }
 
-    const mappedOrders = Array.isArray(rows)
-      ? rows.map(rowToOrder)
+    const cachedById = new Map<string, Order>();
+
+    cachedOrders.forEach((order) => {
+      if (order?.id) {
+        cachedById.set(order.id, order);
+      }
+    });
+
+    const mappedOrders: Order[] = Array.isArray(rows)
+      ? rows.map((row: any) => {
+          const remoteOrder = rowToOrder(row);
+          const cachedOrder = cachedById.get(
+            remoteOrder.id
+          );
+
+          if (!cachedOrder) {
+            return remoteOrder;
+          }
+
+          return {
+            ...cachedOrder,
+            ...remoteOrder,
+
+            items:
+              Array.isArray(remoteOrder.items) &&
+              remoteOrder.items.length > 0
+                ? remoteOrder.items
+                : cachedOrder.items,
+
+            paymentReference:
+              remoteOrder.paymentReference ??
+              cachedOrder.paymentReference,
+
+            paymentProofImage:
+              remoteOrder.paymentProofImage ??
+              cachedOrder.paymentProofImage,
+
+            paymentProofUrl:
+              remoteOrder.paymentProofUrl ??
+              cachedOrder.paymentProofUrl,
+
+            customer: {
+              ...cachedOrder.customer,
+              ...remoteOrder.customer,
+            },
+          };
+        })
       : [];
 
     const remoteIds = new Set(
-      mappedOrders.map((o) => o.id)
+      mappedOrders.map((order) => order.id)
     );
 
     const pendingLocalOrders = cachedOrders.filter(
       (localOrder) => {
         if (!localOrder?.id) return false;
-        if (remoteIds.has(localOrder.id)) return false;
+
+        if (remoteIds.has(localOrder.id)) {
+          return false;
+        }
 
         const items =
           localOrder.items ||
-          localOrder.products_json ||
+          (localOrder as any).products_json ||
           [];
 
         return (

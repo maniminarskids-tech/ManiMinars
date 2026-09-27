@@ -1136,7 +1136,6 @@ export const AdminPage: React.FC = () => {
                   const customer = {
                     fullName: customerObj?.fullName || customerObj?.name || order.customer_name || (order as any).fullName || (order as any).name || 'Customer',
                     phone: customerObj?.phone || order.phone || '',
-                    email: customerObj?.email || order.email || '',
                     address: customerObj?.address || order.address || '',
                     city: customerObj?.city || order.city || '',
                     notes: customerObj?.notes || order.notes || null,
@@ -1252,6 +1251,7 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                           <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
                             Customer & Delivery
                           </span>
+
                           <div>
                             <h4 className="font-bold text-neutral-900 text-sm">
                               {customer.fullName}
@@ -1259,11 +1259,9 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                             <div className="flex items-center gap-1.5 mt-0.5">
                               <span className="font-mono text-neutral-700">{customer.phone}</span>
                             </div>
-                            <p className="text-neutral-500 text-[11px] mt-0.5">{customer.email}</p>
                           </div>
 
                           <div className="pt-1">
-                            {/* Direct WhatsApp button */}
                             <a
                               href={`https://wa.me/${cleanCustomerPhone}?text=${encodeURIComponent(
                                 waCustomerMsg
@@ -1285,69 +1283,6 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                               <p className="mt-1 text-neutral-600 bg-neutral-50 p-2 rounded-lg border border-neutral-200 text-[11px]">
                                 <span className="font-semibold">Note:</span> {customer.notes}
                               </p>
-                            )}
-                          </div>
-
-                          {/* Ordered Products */}
-                          <div className="pt-3 border-t border-neutral-100 space-y-2">
-                            <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-500 block">
-                              Ordered Products ({orderProducts.length})
-                            </span>
-                            {orderProducts.length === 0 ? (
-                              <div className="p-2.5 rounded-lg bg-neutral-50 text-neutral-400 text-xs italic border border-neutral-200">
-                                No products found in order
-                              </div>
-                            ) : (
-                              <div className="space-y-2">
-                                {orderProducts.map((item: any, index: number) => {
-                                  const productName = item.product?.name || item.name || 'Product';
-                                  const productImage =
-                                    item.product?.image ||
-                                    item.product?.images?.[0] ||
-                                    item.image ||
-                                    FALLBACK_GARMENT_IMAGE;
-                                  const size = item.selectedSize || item.size || 'Standard';
-                                  const color =
-                                    item.selectedColor?.name ||
-                                    (typeof item.selectedColor === 'string'
-                                      ? item.selectedColor
-                                      : item.color || 'Standard');
-                                  const quantity = item.quantity ?? 1;
-                                  const itemPrice =
-                                    item.price ??
-                                    item.product?.price ??
-                                    0;
-
-                                  return (
-                                    <div
-                                      key={index}
-                                      className="bg-neutral-50 p-2.5 rounded-lg border border-neutral-200 text-xs space-y-1.5"
-                                    >
-                                      <div className="flex items-start gap-2.5">
-                                        <img
-                                          src={productImage}
-                                          alt={productName}
-                                          onError={(e) => {
-                                            (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
-                                          }}
-                                          className="w-10 h-10 rounded-md object-cover border border-neutral-200 bg-neutral-100 shrink-0"
-                                        />
-                                        <div className="min-w-0 flex-1">
-                                          <div className="font-bold text-neutral-900 leading-snug">
-                                            {productName}
-                                          </div>
-                                        </div>
-                                      </div>
-                                      <div className="grid grid-cols-2 gap-1 text-[11px] text-neutral-600 pt-1 border-t border-neutral-200/60">
-                                        <div>Size: <span className="font-semibold text-neutral-800">{size}</span></div>
-                                        <div>Color: <span className="font-semibold text-neutral-800">{color}</span></div>
-                                        <div>Qty: <span className="font-semibold text-neutral-800">{quantity}</span></div>
-                                        <div>Price: <span className="font-bold text-neutral-900">PKR {(itemPrice ?? 0).toLocaleString()}</span></div>
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
                             )}
                           </div>
                         </div>
@@ -1440,7 +1375,7 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                           </div>
                         </div>
 
-                        {/* 3. Admin Actions (4 cols): Approve & Reject & Logistics */}
+                        {/* 3. Admin Actions (4 cols): Approve & Reject & Status */}
                         <div className="lg:col-span-4 text-xs space-y-3 border-t lg:border-t-0 lg:border-l border-neutral-100 lg:pl-4">
                           <span className="font-bold uppercase tracking-wider text-[10px] text-neutral-400 block">
                             Verification & Logistics
@@ -1475,7 +1410,7 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                             </button>
                           </div>
 
-                          {/* Secondary Status Selector & Logistics */}
+                          {/* Secondary Status Selector */}
                           <div className="pt-2 border-t border-neutral-100 space-y-2">
                             <div>
                               <label className="block text-[10px] font-semibold text-neutral-500 mb-1 uppercase tracking-wider">
@@ -1495,30 +1430,6 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                 <option value="delivered">Delivered</option>
                                 <option value="cancelled">Cancelled</option>
                               </select>
-                            </div>
-
-                            <div>
-                              <input
-                                type="text"
-                                placeholder="Tracking # (e.g. TRX-90412)"
-                                value={order.trackingNumber || ''}
-                                onChange={(e) =>
-                                  updateOrderStatus(order.id, order.status, e.target.value, order.courier)
-                                }
-                                className="w-full text-[11px] px-2.5 py-1.5 rounded-lg border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D]"
-                              />
-                            </div>
-
-                            <div>
-                              <input
-                                type="text"
-                                placeholder="Courier (Trax / TCS / Leopard)"
-                                value={order.courier || ''}
-                                onChange={(e) =>
-                                  updateOrderStatus(order.id, order.status, order.trackingNumber, e.target.value)
-                                }
-                                className="w-full text-[11px] px-2.5 py-1.5 rounded-lg border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D]"
-                              />
                             </div>
                           </div>
                         </div>
@@ -1585,7 +1496,6 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                       </thead>
                                       <tbody className="divide-y divide-neutral-100">
                                         {orderProducts.map((p: any, pIdx) => {
-                                          console.log("ORDER PRODUCT RAW:", p);
                                           const pName =
                                             p.product?.name ||
                                             p.name ||
@@ -1628,72 +1538,72 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                           const lineTotal = p.lineTotal ?? (itemPrice * pQuantity);
 
                                           return (
-                                          <tr key={p.id || pIdx} className="hover:bg-neutral-50/50 transition-colors">
-                                            {/* 1 & 2: Product Image & Product Name */}
-                                            <td className="py-3 px-4">
-                                              <div className="flex items-center gap-3">
-                                                <img
-                                                  src={pImage}
-                                                  alt={pName}
-                                                  onError={(e) => {
-                                                    (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
-                                                  }}
-                                                  className="w-13 h-13 object-cover rounded-xl border border-neutral-200 bg-neutral-100 shadow-2xs shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
-                                                  onClick={() => setProofModalUrl({ url: pImage, orderId: `${order.id} - ${pName}` })}
-                                                  title="Click to view image preview"
-                                                />
-                                                <div className="min-w-0">
-                                                  <span className="font-bold text-neutral-900 text-xs block leading-snug">
-                                                    {pName}
-                                                  </span>
-                                                  <span className="text-[10px] text-neutral-400 mt-0.5 block">
-                                                    {p.sku || p.product?.sku ? `SKU: ${p.sku || p.product?.sku}` : pName}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            </td>
-
-                                            {/* 3: Selected Size */}
-                                            <td className="py-3 px-3">
-                                              <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-xs bg-neutral-100 text-neutral-800 border border-neutral-200/80">
-                                                {pSize}
-                                              </span>
-                                            </td>
-
-                                            {/* 4: Selected Color */}
-                                            <td className="py-3 px-3">
-                                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-neutral-50 text-neutral-800 border border-neutral-200">
-                                                {pColorHex ? (
-                                                  <span
-                                                    className="w-3.5 h-3.5 rounded-full border border-black/15 shadow-2xs shrink-0"
-                                                    style={{ backgroundColor: pColorHex }}
+                                            <tr key={p.id || pIdx} className="hover:bg-neutral-50/50 transition-colors">
+                                              {/* 1 & 2: Product Image & Product Name */}
+                                              <td className="py-3 px-4">
+                                                <div className="flex items-center gap-3">
+                                                  <img
+                                                    src={pImage}
+                                                    alt={pName}
+                                                    onError={(e) => {
+                                                      (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
+                                                    }}
+                                                    className="w-13 h-13 object-cover rounded-xl border border-neutral-200 bg-neutral-100 shadow-2xs shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                                    onClick={() => setProofModalUrl({ url: pImage, orderId: `${order.id} - ${pName}` })}
+                                                    title="Click to view image preview"
                                                   />
-                                                ) : (
-                                                  <span className="w-3 h-3 rounded-full bg-neutral-400 shrink-0" />
-                                                )}
-                                                <span>{pColorName}</span>
-                                              </div>
-                                            </td>
+                                                  <div className="min-w-0">
+                                                    <span className="font-bold text-neutral-900 text-xs block leading-snug">
+                                                      {pName}
+                                                    </span>
+                                                    <span className="text-[10px] text-neutral-400 mt-0.5 block">
+                                                      {p.sku || p.product?.sku ? `SKU: ${p.sku || p.product?.sku}` : pName}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                              </td>
 
-                                            {/* 5: Quantity */}
-                                            <td className="py-3 px-3 text-center">
-                                              <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full font-bold text-xs bg-neutral-100 text-neutral-900 border border-neutral-200">
-                                                {p.quantity}
-                                              </span>
-                                            </td>
+                                              {/* 3: Selected Size */}
+                                              <td className="py-3 px-3">
+                                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-bold text-xs bg-neutral-100 text-neutral-800 border border-neutral-200/80">
+                                                  {pSize}
+                                                </span>
+                                              </td>
 
-                                            {/* 6: Unit Price */}
-                                            <td className="py-3 px-3 text-right font-medium text-neutral-600 font-mono text-xs">
-                                              PKR {(itemPrice ?? 0).toLocaleString()}
-                                            </td>
+                                              {/* 4: Selected Color */}
+                                              <td className="py-3 px-3">
+                                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-neutral-50 text-neutral-800 border border-neutral-200">
+                                                  {pColorHex ? (
+                                                    <span
+                                                      className="w-3.5 h-3.5 rounded-full border border-black/15 shadow-2xs shrink-0"
+                                                      style={{ backgroundColor: pColorHex }}
+                                                    />
+                                                  ) : (
+                                                    <span className="w-3 h-3 rounded-full bg-neutral-400 shrink-0" />
+                                                  )}
+                                                  <span>{pColorName}</span>
+                                                </div>
+                                              </td>
 
-                                            {/* 7: Line Total */}
-                                            <td className="py-3 px-4 text-right font-bold text-neutral-900 font-mono text-xs">
-                                              PKR {(lineTotal ?? 0).toLocaleString()}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
+                                              {/* 5: Quantity */}
+                                              <td className="py-3 px-3 text-center">
+                                                <span className="inline-flex items-center justify-center min-w-[28px] px-2 py-0.5 rounded-full font-bold text-xs bg-neutral-100 text-neutral-900 border border-neutral-200">
+                                                  {pQuantity}
+                                                </span>
+                                              </td>
+
+                                              {/* 6: Unit Price */}
+                                              <td className="py-3 px-3 text-right font-medium text-neutral-600 font-mono text-xs">
+                                                PKR {(itemPrice ?? 0).toLocaleString()}
+                                              </td>
+
+                                              {/* 7: Line Total */}
+                                              <td className="py-3 px-4 text-right font-bold text-neutral-900 font-mono text-xs">
+                                                PKR {(lineTotal ?? 0).toLocaleString()}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
                                       </tbody>
                                       {/* Financial Breakdown Table Footer */}
                                       <tfoot className="bg-neutral-50/80 border-t border-neutral-200 text-xs">
