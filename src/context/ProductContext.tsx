@@ -623,10 +623,10 @@ const refreshOrders = useCallback(async () => {
    const { data: rows, error } = await supabase
   .from('orders')
   .select(
-    'id, order_id, customer_name, phone, total_amount, payment_method, payment_reference, status, created_at, items'
+    'id, order_id, customer_name, phone, address, city, notes, subtotal, total_amount, payment_method, payment_reference, payment_status, status, created_at, items'
   )
   .order('created_at', { ascending: false })
-  .limit(20);
+  .limit(50);
 
     if (error) {
       console.error(
