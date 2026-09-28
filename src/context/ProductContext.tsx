@@ -562,21 +562,26 @@ const [orders, setOrders] = useState<Order[]>(() => {
     if (stored) {
       const parsed = JSON.parse(stored);
 
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const validOrders = parsed.filter(
-          (o: any) => Boolean(o && (o.id || o.order_id))
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (o: any) => o && (o.id || o.order_id)
         );
-
-        if (validOrders.length > 0) {
-          return validOrders;
-        }
       }
     }
   } catch (e) {
-    console.error('Error loading orders from storage:', e);
+    console.error(
+      'Error loading orders from storage:',
+      e
+    );
+
+    try {
+      localStorage.removeItem('mani_minars_orders_v1');
+    } catch {
+      // Ignore cache cleanup errors
+    }
   }
 
-  return INITIAL_ORDERS;
+  return [];
 });
 
 const [isOrdersLoading, setIsOrdersLoading] =
