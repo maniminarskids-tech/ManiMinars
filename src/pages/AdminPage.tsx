@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useProducts, FALLBACK_GARMENT_IMAGE } from '../context/ProductContext';
 import { Product, Order, OrderStatus, Category, AgeGroup, Coupon } from '../types';
 import { logoutAdmin, ADMIN_PASSCODE } from '../utils/security';
+import { getSupabase } from '../services/supabase';
 export { ADMIN_PASSCODE };
 import { AVAILABLE_COUPONS } from '../context/CartContext';
 import {
@@ -173,11 +174,85 @@ export const AdminPage: React.FC = () => {
     setTimeout(() => setIsSyncing(false), 800);
   };
 
+  const handleLoadPaymentProof = async (orderId: string) => {
+  const supabase = getSupabase();
+
+  if (!supabase) {
+    console.error('Supabase is not configured.');
+    return;
+  }
+
+  setLoadingProofOrderId(orderId);
+
+  try {
+    let { data, error } = await supabase
+      .from('orders')
+      .select(
+        'order_id, id, payment_proof_url, payment_proof_image'
+      )
+      .eq('order_id', orderId)
+      .maybeSingle();
+
+    if (error || !data) {
+      const fallback = await supabase
+        .from('orders')
+        .select(
+          'order_id, id, payment_proof_url, payment_proof_image'
+        )
+        .eq('id', orderId)
+        .maybeSingle();
+
+      data = fallback.data;
+      error = fallback.error;
+    }
+
+    if (error) {
+      console.error(
+        'Payment proof fetch error:',
+        error
+      );
+      return;
+    }
+
+    const proof =
+      data?.payment_proof_url ||
+      data?.payment_proof_image ||
+      null;
+
+    if (proof) {
+      setProofByOrderId((prev) => ({
+        ...prev,
+        [orderId]: proof,
+      }));
+    } else {
+      console.warn(
+        'No payment proof found for order:',
+        orderId
+      );
+    }
+  } catch (err) {
+    console.error(
+      'Failed to fetch payment proof:',
+      err
+    );
+  } finally {
+    setLoadingProofOrderId(null);
+  }
+};
+
   // Tab State: 'products' | 'orders' | 'inventory' | 'deliveries' | 'coupons' | 'settings'
   const [activeTab, setActiveTab] = useState<'products' | 'orders' | 'inventory' | 'deliveries' | 'coupons' | 'settings'>('orders');
 
   // Proof image lightbox modal state
   const [proofModalUrl, setProofModalUrl] = useState<{ url: string; orderId: string } | null>(null);
+
+  const [proofByOrderId, setProofByOrderId] = useState<
+  Record<string, string>
+>({});
+
+const [loadingProofOrderId, setLoadingProofOrderId] =
+  useState<string | null>(null);
+
   const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<{ orderId: string; message: string; type: 'approved' | 'rejected' } | null>(null);
 
@@ -1141,7 +1216,13 @@ export const AdminPage: React.FC = () => {
                     notes: customerObj?.notes || order.notes || null,
                   };
 
-                  const paymentProof = order.payment_proof_url || order.payment_proof_image || order.paymentProofUrl || order.paymentProofImage || null;
+                  const paymentProof =
+  order.payment_proof_url ||
+  order.payment_proof_image ||
+  order.paymentProofUrl ||
+  order.paymentProofImage ||
+  proofByOrderId[order.id] ||
+  null;
 
                   // Pre-format WhatsApp message for courier update
                   const waPaymentMethod =
@@ -1367,9 +1448,22 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                   </button>
                                 </div>
                               ) : (
-                                <div className="p-2.5 rounded-lg bg-neutral-100 text-neutral-500 text-[11px] text-center">
-                                  No screenshot uploaded (TID reference provided)
-                                </div>
+                                <div className="space-y-1.5">
+  <div className="p-2.5 rounded-lg bg-neutral-100 text-neutral-500 text-[11px] text-center">
+    Payment proof is available.
+  </div>
+
+  <button
+    type="button"
+    onClick={() => handleLoadPaymentProof(order.id)}
+    disabled={loadingProofOrderId === order.id}
+    className="w-full py-1.5 rounded-lg border border-neutral-300 bg-white hover:bg-neutral-50 text-[11px] font-semibold text-neutral-800 flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
+  >
+    {loadingProofOrderId === order.id
+      ? 'Loading Payment Proof...'
+      : 'View Payment Proof'}
+  </button>
+</div>
                               )}
                             </div>
                           </div>
