@@ -554,197 +554,158 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     saveToLocalCache(products);
   }, [products, saveToLocalCache]);
 
-         // 4. Orders state: initialize from local cache safely without purging valid orders
-const [orders, setOrders] = useState<Order[]>(() => {
-  try {
-    const stored = localStorage.getItem('mani_minars_orders_v1');
-
-    if (stored) {
-      const parsed = JSON.parse(stored);
-
-      if (Array.isArray(parsed)) {
-        return parsed.filter(
-          (o: any) => o && (o.id || o.order_id)
-        );
-      }
-    }
-  } catch (e) {
-    console.error(
-      'Error loading orders from storage:',
-      e
-    );
-
+  // 4. Orders state: Supabase is the source of truth, loaded via refreshOrders()
+  const [orders, setOrders] = useState<Order[]>(() => {
     try {
       localStorage.removeItem('mani_minars_orders_v1');
     } catch {
       // Ignore cache cleanup errors
     }
-  }
+    return [];
+  });
 
-  return [];
-});
-
-const [isOrdersLoading, setIsOrdersLoading] =
-  useState<boolean>(false);
+  const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(false);
 
   // Fetch orders from Supabase orders table
-// Keep the main list query lightweight to avoid Supabase statement timeouts.
-const refreshOrders = useCallback(async () => {
-  let cachedOrders: Order[] = [];
+  // Keep the main list query lightweight to avoid Supabase statement timeouts.
+  const refreshOrders = useCallback(async () => {
+    const supabase = getSupabase();
 
-  try {
-    const stored = localStorage.getItem('mani_minars_orders_v1');
-
-    if (stored) {
-      const parsed = JSON.parse(stored);
-
-      if (Array.isArray(parsed)) {
-        cachedOrders = parsed.filter(
-          (o: any) => o && (o.id || o.order_id)
-        );
-      }
-    }
-  } catch (e) {
-    console.error('Error reading cached orders:', e);
-  }
-
-  const supabase = getSupabase();
-
-  if (!supabase) {
-    setOrders((prev) =>
-      prev.length > 0 ? prev : cachedOrders
-    );
-    return;
-  }
-
-  try {
-    setIsOrdersLoading(true);
-
-   const { data: rows, error } = await supabase
-  .from('orders')
-  .select(
-    'id, order_id, customer_name, phone, address, city, notes, subtotal, total_amount, payment_method, payment_reference, payment_status, status, created_at, items'
-  )
-  .order('created_at', { ascending: false })
-  .limit(50);
-
-    if (error) {
-      console.error(
-        'Supabase orders fetch error:',
-        error
-      );
-
-      setOrders((prev) =>
-        prev.length > 0 ? prev : cachedOrders
-      );
-
+    if (!supabase) {
       return;
     }
 
-    const cachedById = new Map<string, Order>();
+    try {
+      setIsOrdersLoading(true);
 
-    cachedOrders.forEach((order) => {
-      if (order?.id) {
-        cachedById.set(order.id, order);
+      const { data: rows, error } = await supabase
+        .from('orders')
+        .select(
+          'id, order_id, customer_name, phone, address, city, notes, subtotal, total_amount, payment_method, payment_reference, payment_status, status, created_at, items'
+        )
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error(
+          'Supabase orders fetch error:',
+          error
+        );
+        return;
       }
-    });
 
-    const mappedOrders: Order[] = Array.isArray(rows)
-      ? rows.map((row: any) => {
-          const remoteOrder = rowToOrder(row);
-          const cachedOrder = cachedById.get(
-            remoteOrder.id
-          );
+      setOrders((prevOrders) => {
+        const existingById = new Map<string, Order>();
 
-          if (!cachedOrder) {
-            return remoteOrder;
+        // Index current in-memory orders (runtime state)
+        prevOrders.forEach((order) => {
+          if (order?.id) existingById.set(String(order.id), order);
+          if (order?.order_id) existingById.set(String(order.order_id), order);
+        });
+
+        const mappedOrders: Order[] = Array.isArray(rows)
+          ? rows.map((row: any) => {
+              const remoteOrder = rowToOrder(row);
+              const existingOrder =
+                existingById.get(String(remoteOrder.id)) ||
+                (remoteOrder.order_id ? existingById.get(String(remoteOrder.order_id)) : undefined);
+
+              if (!existingOrder) {
+                return remoteOrder;
+              }
+
+              // Preserve non-empty items/products_json
+              const items =
+                Array.isArray(remoteOrder.items) && remoteOrder.items.length > 0
+                  ? remoteOrder.items
+                  : Array.isArray(remoteOrder.products_json) && remoteOrder.products_json.length > 0
+                    ? remoteOrder.products_json
+                    : Array.isArray(existingOrder.items) && existingOrder.items.length > 0
+                      ? existingOrder.items
+                      : Array.isArray(existingOrder.products_json) && existingOrder.products_json.length > 0
+                        ? existingOrder.products_json
+                        : [];
+
+              // Preserve payment proof images/URLs
+              const paymentProof =
+                remoteOrder.paymentProofUrl ||
+                remoteOrder.paymentProofImage ||
+                (remoteOrder as any).payment_proof_url ||
+                (remoteOrder as any).payment_proof_image ||
+                existingOrder.paymentProofUrl ||
+                existingOrder.paymentProofImage ||
+                (existingOrder as any).payment_proof_url ||
+                (existingOrder as any).payment_proof_image;
+
+              // Preserve and merge customer fields
+              const mergedCustomer = {
+                ...existingOrder.customer,
+                ...remoteOrder.customer,
+                fullName:
+                  remoteOrder.customer?.fullName && remoteOrder.customer.fullName !== 'Customer'
+                    ? remoteOrder.customer.fullName
+                    : (existingOrder.customer?.fullName || remoteOrder.customer?.fullName || 'Customer'),
+                phone: remoteOrder.customer?.phone || existingOrder.customer?.phone || '',
+                email: remoteOrder.customer?.email || existingOrder.customer?.email || '',
+                address: remoteOrder.customer?.address || existingOrder.customer?.address || '',
+                city: remoteOrder.customer?.city || existingOrder.customer?.city || 'Pakistan',
+                notes: remoteOrder.customer?.notes ?? existingOrder.customer?.notes,
+              };
+
+              return {
+                ...existingOrder,
+                ...remoteOrder,
+                customer: mergedCustomer,
+                items,
+                products_json: items,
+                paymentProofImage: paymentProof,
+                paymentProofUrl: paymentProof,
+                payment_proof_url: paymentProof,
+                payment_proof_image: paymentProof,
+                paymentReference:
+                  remoteOrder.paymentReference ||
+                  existingOrder.paymentReference,
+              };
+            })
+          : [];
+
+        const remoteIds = new Set<string>();
+        mappedOrders.forEach((order) => {
+          if (order.id) remoteIds.add(String(order.id));
+          if (order.order_id) remoteIds.add(String(order.order_id));
+        });
+
+        const pendingLocalOrders = prevOrders.filter((localOrder) => {
+          if (!localOrder?.id && !localOrder?.order_id) return false;
+          const id = String(localOrder.id || '');
+          const orderId = String(localOrder.order_id || '');
+
+          if ((id && remoteIds.has(id)) || (orderId && remoteIds.has(orderId))) {
+            return false;
           }
 
-          return {
-            ...cachedOrder,
-            ...remoteOrder,
+          const items =
+            localOrder.items ||
+            (localOrder as any).products_json ||
+            [];
 
-            items:
-              Array.isArray(remoteOrder.items) &&
-              remoteOrder.items.length > 0
-                ? remoteOrder.items
-                : cachedOrder.items,
+          return Array.isArray(items) && items.length > 0;
+        });
 
-            paymentReference:
-              remoteOrder.paymentReference ??
-              cachedOrder.paymentReference,
-
-            paymentProofImage:
-              remoteOrder.paymentProofImage ??
-              cachedOrder.paymentProofImage,
-
-            paymentProofUrl:
-              remoteOrder.paymentProofUrl ??
-              cachedOrder.paymentProofUrl,
-
-            customer: {
-              ...cachedOrder.customer,
-              ...remoteOrder.customer,
-            },
-          };
-        })
-      : [];
-
-    const remoteIds = new Set(
-      mappedOrders.map((order) => order.id)
-    );
-
-    const pendingLocalOrders = cachedOrders.filter(
-      (localOrder) => {
-        if (!localOrder?.id) return false;
-
-        if (remoteIds.has(localOrder.id)) {
-          return false;
-        }
-
-        const items =
-          localOrder.items ||
-          (localOrder as any).products_json ||
-          [];
-
-        return (
-          Array.isArray(items) &&
-          items.length > 0
-        );
-      }
-    );
-
-    const finalOrders = [
-      ...mappedOrders,
-      ...pendingLocalOrders,
-    ];
-
-    setOrders(finalOrders);
-
-    try {
-      localStorage.setItem(
-        'mani_minars_orders_v1',
-        JSON.stringify(finalOrders)
-      );
-    } catch (cacheError) {
+        return [
+          ...mappedOrders,
+          ...pendingLocalOrders,
+        ];
+      });
+    } catch (err) {
       console.error(
-        'Error caching orders:',
-        cacheError
+        'Failed to sync orders with Supabase:',
+        err
       );
+    } finally {
+      setIsOrdersLoading(false);
     }
-  } catch (err) {
-    console.error(
-      'Failed to sync orders with Supabase:',
-      err
-    );
-
-    setOrders((prev) =>
-      prev.length > 0 ? prev : cachedOrders
-    );
-  } finally {
-    setIsOrdersLoading(false);
-  }
-}, []);
+  }, []);
 
   // Subscribe to real-time order creations and updates from other devices / admin
 useEffect(() => {
@@ -770,13 +731,55 @@ useEffect(() => {
 
           setOrders((prev) => {
             const exists = prev.some(
-              (o) => o.id === newOrder.id
+              (o) =>
+                o.id === newOrder.id ||
+                (newOrder.order_id && o.order_id === newOrder.order_id) ||
+                (newOrder.order_id && o.id === newOrder.order_id) ||
+                (o.order_id && o.order_id === newOrder.id)
             );
 
             if (exists) {
-              return prev.map((o) =>
-                o.id === newOrder.id ? newOrder : o
-              );
+              return prev.map((o) => {
+                const isMatch =
+                  o.id === newOrder.id ||
+                  (newOrder.order_id && o.order_id === newOrder.order_id) ||
+                  (newOrder.order_id && o.id === newOrder.order_id) ||
+                  (o.order_id && o.order_id === newOrder.id);
+
+                if (!isMatch) return o;
+
+                const items =
+                  Array.isArray(newOrder.items) && newOrder.items.length > 0
+                    ? newOrder.items
+                    : Array.isArray(newOrder.products_json) && newOrder.products_json.length > 0
+                      ? newOrder.products_json
+                      : Array.isArray(o.items) && o.items.length > 0
+                        ? o.items
+                        : Array.isArray(o.products_json) && o.products_json.length > 0
+                          ? o.products_json
+                          : [];
+
+                const paymentProof =
+                  newOrder.paymentProofUrl ||
+                  newOrder.paymentProofImage ||
+                  (newOrder as any).payment_proof_url ||
+                  (newOrder as any).payment_proof_image ||
+                  o.paymentProofUrl ||
+                  o.paymentProofImage ||
+                  (o as any).payment_proof_url ||
+                  (o as any).payment_proof_image;
+
+                return {
+                  ...o,
+                  ...newOrder,
+                  items,
+                  products_json: items,
+                  paymentProofImage: paymentProof,
+                  paymentProofUrl: paymentProof,
+                  payment_proof_url: paymentProof,
+                  payment_proof_image: paymentProof,
+                };
+              });
             }
 
             return [newOrder, ...prev];
@@ -788,9 +791,70 @@ useEffect(() => {
           const updated = rowToOrder(payload.new);
 
           setOrders((prev) =>
-            prev.map((o) =>
-              o.id === updated.id ? updated : o
-            )
+            prev.map((existingOrder) => {
+              const isMatch =
+                existingOrder.id === updated.id ||
+                (existingOrder.order_id && existingOrder.order_id === updated.order_id) ||
+                (existingOrder.id && existingOrder.id === updated.order_id) ||
+                (existingOrder.order_id && existingOrder.order_id === updated.id);
+
+              if (!isMatch) {
+                return existingOrder;
+              }
+
+              // Preserve items: never replace non-empty items with empty array
+              const items =
+                Array.isArray(updated.items) && updated.items.length > 0
+                  ? updated.items
+                  : Array.isArray(updated.products_json) && updated.products_json.length > 0
+                    ? updated.products_json
+                    : Array.isArray(existingOrder.items) && existingOrder.items.length > 0
+                      ? existingOrder.items
+                      : Array.isArray(existingOrder.products_json) && existingOrder.products_json.length > 0
+                        ? existingOrder.products_json
+                        : [];
+
+              // Preserve customer data if updated has missing/default values
+              const mergedCustomer = {
+                ...existingOrder.customer,
+                ...updated.customer,
+                fullName:
+                  updated.customer?.fullName && updated.customer.fullName !== 'Customer'
+                    ? updated.customer.fullName
+                    : (existingOrder.customer?.fullName || updated.customer?.fullName || 'Customer'),
+                phone: updated.customer?.phone || existingOrder.customer?.phone || '',
+                email: updated.customer?.email || existingOrder.customer?.email || '',
+                address: updated.customer?.address || existingOrder.customer?.address || '',
+                city: updated.customer?.city || existingOrder.customer?.city || 'Pakistan',
+                notes: updated.customer?.notes ?? existingOrder.customer?.notes,
+              };
+
+              // Preserve payment proof images/URLs
+              const paymentProof =
+                updated.paymentProofUrl ||
+                updated.paymentProofImage ||
+                (updated as any).payment_proof_url ||
+                (updated as any).payment_proof_image ||
+                existingOrder.paymentProofUrl ||
+                existingOrder.paymentProofImage ||
+                (existingOrder as any).payment_proof_url ||
+                (existingOrder as any).payment_proof_image;
+
+              return {
+                ...existingOrder,
+                ...updated,
+                customer: mergedCustomer,
+                items,
+                products_json: items,
+                paymentProofImage: paymentProof,
+                paymentProofUrl: paymentProof,
+                payment_proof_url: paymentProof,
+                payment_proof_image: paymentProof,
+                paymentReference:
+                  updated.paymentReference ||
+                  existingOrder.paymentReference,
+              };
+            })
           );
         } else if (
           payload.eventType === 'DELETE' &&
@@ -798,7 +862,10 @@ useEffect(() => {
         ) {
           setOrders((prev) =>
             prev.filter(
-              (o) => o.id !== payload.old.id
+              (o) =>
+                o.id !== payload.old.id &&
+                o.order_id !== payload.old.order_id &&
+                o.id !== payload.old.order_id
             )
           );
         }
@@ -821,15 +888,6 @@ useEffect(() => {
     }
     return DEFAULT_DELIVERY;
   });
-
-  useEffect(() => {
-    if (!orders || orders.length === 0) return;
-    try {
-      localStorage.setItem('mani_minars_orders_v1', JSON.stringify(orders));
-    } catch (e) {
-      console.error('Error saving orders to storage', e);
-    }
-  }, [orders]);
 
   useEffect(() => {
     try {
@@ -1027,42 +1085,22 @@ useEffect(() => {
   };
 
   // Orders methods - fully integrated with Supabase and real-time syncing
-const addOrder = async (order: Order) => {
-  // Keep the original order exactly as received from CheckoutPage.
-  // Do NOT convert/strip the product items here.
-  const orderToSave: Order = {
-    ...order,
-    items: Array.isArray(order.items) ? order.items : [],
-  };
+  const addOrder = async (order: Order) => {
+    // Keep the original order exactly as received from CheckoutPage.
+    // Do NOT convert/strip the product items here.
+    const orderToSave: Order = {
+      ...order,
+      items: Array.isArray(order.items) ? order.items : [],
+    };
 
-  // 1. Instantly update local state
-  setOrders((prev) => [
-    orderToSave,
-    ...prev.filter((o) => o.id !== orderToSave.id),
-  ]);
-
-  // 2. Save local backup
-  try {
-    const stored = localStorage.getItem('mani_minars_orders_v1');
-    const currentList: Order[] = stored
-      ? JSON.parse(stored)
-      : [];
-
-    const updatedList = [
+    // 1. Instantly update local state (in-memory only, no localStorage caching of heavy proofs)
+    setOrders((prev) => [
       orderToSave,
-      ...currentList.filter((o) => o.id !== orderToSave.id),
-    ];
+      ...prev.filter((o) => o.id !== orderToSave.id),
+    ]);
 
-    localStorage.setItem(
-      'mani_minars_orders_v1',
-      JSON.stringify(updatedList)
-    );
-  } catch (e) {
-    console.error('Error caching order locally:', e);
-  }
-
-  // 3. Reduce stock using the original order items
-  await reduceStockForOrder(orderToSave);
+    // 2. Reduce stock using the original order items
+    await reduceStockForOrder(orderToSave);
 
   // 4. Save the complete order to Supabase
   const supabase = getSupabase();
@@ -1212,88 +1250,93 @@ const addOrder = async (order: Order) => {
 };
 
   const approveOrder = async (orderId: string) => {
-  // Update local UI immediately
-  setOrders((prev) =>
-    prev.map((o) =>
-      o.id === orderId
-        ? { ...o, status: 'Approved' }
-        : o
-    )
-  );
-
-  const supabase = getSupabase();
-
-  if (!supabase) {
-    return;
-  }
-
-  try {
-    const updatePayload = {
-      status: 'Approved',
-      updated_at: new Date().toISOString(),
-    };
-
-    // First try the order_id column
-    const firstUpdate = await supabase
-      .from('orders')
-      .update(updatePayload)
-      .eq('order_id', orderId)
-      .select('id, order_id, status');
-
-    if (firstUpdate.error) {
-      console.error(
-        'Supabase approve update error:',
-        firstUpdate.error
-      );
-    }
-
-    // If order_id did not update any row, try the id column
-    if (
-      !firstUpdate.error &&
-      (!firstUpdate.data ||
-        firstUpdate.data.length === 0)
-    ) {
-      const secondUpdate = await supabase
-        .from('orders')
-        .update(updatePayload)
-        .eq('id', orderId)
-        .select('id, order_id, status');
-
-      if (secondUpdate.error) {
-        console.error(
-          'Supabase approve fallback update error:',
-          secondUpdate.error
-        );
-      }
-
-      if (
-        !secondUpdate.error &&
-        (!secondUpdate.data ||
-          secondUpdate.data.length === 0)
-      ) {
-        console.error(
-          'Approve failed: no Supabase order row matched order ID:',
-          orderId
-        );
-      }
-    }
-
-    // Re-sync local state from Supabase
-    await refreshOrders();
-  } catch (err) {
-    console.error(
-      'Error approving order in Supabase:',
-      err
+    // Update local UI immediately, preserving all existing order properties
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === orderId || o.order_id === orderId
+          ? { ...o, status: 'Approved' }
+          : o
+      )
     );
 
-    // Restore latest remote/local state after failure
-    await refreshOrders();
-  }
-};
+    const supabase = getSupabase();
+
+    if (!supabase) {
+      return;
+    }
+
+    try {
+      const updatePayload = {
+        status: 'Approved',
+        updated_at: new Date().toISOString(),
+      };
+
+      // First try the order_id column
+      const firstUpdate = await supabase
+        .from('orders')
+        .update(updatePayload)
+        .eq('order_id', orderId)
+        .select('id, order_id, status');
+
+      if (firstUpdate.error) {
+        console.error(
+          'Supabase approve update error:',
+          firstUpdate.error
+        );
+      }
+
+      // If order_id did not update any row, try the id column
+      if (
+        !firstUpdate.error &&
+        (!firstUpdate.data ||
+          firstUpdate.data.length === 0)
+      ) {
+        const secondUpdate = await supabase
+          .from('orders')
+          .update(updatePayload)
+          .eq('id', orderId)
+          .select('id, order_id, status');
+
+        if (secondUpdate.error) {
+          console.error(
+            'Supabase approve fallback update error:',
+            secondUpdate.error
+          );
+        }
+
+        if (
+          !secondUpdate.error &&
+          (!secondUpdate.data ||
+            secondUpdate.data.length === 0)
+        ) {
+          console.error(
+            'Approve failed: no Supabase order row matched order ID:',
+            orderId
+          );
+        }
+      }
+
+      // Re-sync local state from Supabase safely
+      await refreshOrders();
+    } catch (err) {
+      console.error(
+        'Error approving order in Supabase:',
+        err
+      );
+
+      // Restore latest remote/local state after failure
+      await refreshOrders();
+    }
+  };
 
   const rejectOrder = async (orderId: string) => {
+    // Update local UI immediately, preserving all existing order properties
     setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: 'Rejected' } : o))
+      prev.map((o) =>
+        o.id === orderId || o.order_id === orderId
+          ? { ...o, status: 'Rejected' }
+          : o
+      )
     );
 
     const supabase = getSupabase();
@@ -1304,8 +1347,10 @@ const addOrder = async (order: Order) => {
         if (res.error) {
           await supabase.from('orders').update(updatePayload).eq('id', orderId);
         }
+        await refreshOrders();
       } catch (err) {
         console.error('Error rejecting order in Supabase:', err);
+        await refreshOrders();
       }
     }
   };
@@ -1316,9 +1361,10 @@ const addOrder = async (order: Order) => {
     trackingNumber?: string,
     courier?: string
   ) => {
+    // Update local UI immediately, preserving items, products_json, payment proof, and other properties
     setOrders((prev) =>
       prev.map((o) => {
-        if (o.id === orderId) {
+        if (o.id === orderId || o.order_id === orderId) {
           return {
             ...o,
             status,
@@ -1344,14 +1390,18 @@ const addOrder = async (order: Order) => {
         if (res.error) {
           await supabase.from('orders').update(updates).eq('id', orderId);
         }
+        await refreshOrders();
       } catch (err) {
         console.error('Error updating order status in Supabase:', err);
+        await refreshOrders();
       }
     }
   };
 
   const deleteOrder = async (orderId: string) => {
-    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    setOrders((prev) =>
+      prev.filter((o) => o.id !== orderId && o.order_id !== orderId)
+    );
 
     const supabase = getSupabase();
     if (supabase) {

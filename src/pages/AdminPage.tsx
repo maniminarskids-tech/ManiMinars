@@ -65,8 +65,6 @@ export interface NormalizedOrderProduct {
 }
 
 export const extractOrderProducts = (order: any): any[] => {
-  console.log("FULL ORDER OBJECT:", order);
-
   if (!order) return [];
 
   let products = order.products_json || order.items || [];
@@ -78,8 +76,6 @@ export const extractOrderProducts = (order: any): any[] => {
       products = [];
     }
   }
-
-  console.log("EXTRACTED PRODUCTS:", products);
 
   return Array.isArray(products) ? products : [];
 };
@@ -163,8 +159,6 @@ export const AdminPage: React.FC = () => {
   useEffect(() => {
     refreshOrders();
   }, [refreshOrders]);
-
-  console.log("ADMIN ORDERS:", orders);
 
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -306,11 +300,11 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
   const [orderSearch, setOrderSearch] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('all');
 
-  // Track collapsed state for order product details (empty object = expanded by default)
-  const [collapsedOrderIds, setCollapsedOrderIds] = useState<Record<string, boolean>>({});
+  // Track expanded state for order product details (empty object = collapsed by default)
+  const [expandedOrderIds, setExpandedOrderIds] = useState<Record<string, boolean>>({});
 
   const toggleOrderDetails = (orderId: string) => {
-    setCollapsedOrderIds((prev) => ({
+    setExpandedOrderIds((prev) => ({
       ...prev,
       [orderId]: !prev[orderId],
     }));
@@ -1196,10 +1190,6 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
                 filteredOrders.map((order) => {
                   const orderProducts = extractOrderProducts(order);
 
-                  console.log("ORDER ITEMS:", order.items);
-                  console.log("ORDER PRODUCTS_JSON:", order.products_json);
-                  console.log("ORDER PRODUCTS:", orderProducts);
-
                   let customerObj: any = order.customer;
                   if (typeof customerObj === 'string') {
                     try {
@@ -1532,7 +1522,7 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                       {/* Dedicated Ordered Products Section (Full Width with Expandable Details) */}
                       {(() => {
                         const orderProducts = extractOrderProducts(order);
-                        const isDetailsOpen = !collapsedOrderIds[order.id];
+                        const isDetailsOpen = Boolean(expandedOrderIds[order.id]);
 
                         return (
                           <div className="pt-3 border-t border-neutral-100 space-y-3">
@@ -1639,6 +1629,8 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                                                   <img
                                                     src={pImage}
                                                     alt={pName}
+                                                    loading="lazy"
+                                                    decoding="async"
                                                     onError={(e) => {
                                                       (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
                                                     }}
