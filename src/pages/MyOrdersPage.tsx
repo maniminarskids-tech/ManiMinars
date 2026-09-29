@@ -390,6 +390,41 @@ export default function MyOrdersPage() {
     };
   };
 
+  // Helper to resolve display payment status consistently with order status
+  const getOrderPaymentStatusDisplay = (order: Order) => {
+    const rawStatus = String(order.status || 'Pending Verification').toLowerCase();
+    const rawPayStatus = String((order as any).payment_status || order.paymentStatus || 'pending').toLowerCase();
+
+    // If an older database record has status Approved, Dispatched, or Delivered but payment_status is still pending, display 'verified' instead of 'pending'.
+    if (rawStatus === 'approved' || rawStatus === 'dispatched' || rawStatus === 'delivered') {
+      if (rawPayStatus === 'pending' || rawPayStatus === 'verified' || rawPayStatus === 'completed') {
+        return {
+          label: 'Verified',
+          className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+        };
+      }
+    }
+
+    if (rawStatus === 'rejected' || rawStatus === 'cancelled' || rawPayStatus === 'rejected' || rawPayStatus === 'failed') {
+      return {
+        label: 'Rejected',
+        className: 'bg-rose-50 text-rose-800 border-rose-200',
+      };
+    }
+
+    if (rawPayStatus === 'verified' || rawPayStatus === 'completed') {
+      return {
+        label: 'Verified',
+        className: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+      };
+    }
+
+    return {
+      label: 'Pending',
+      className: 'bg-amber-50 text-amber-800 border-amber-200',
+    };
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F6] text-[#1E1E1E]">
       <Header />
@@ -650,10 +685,6 @@ export default function MyOrdersPage() {
             {filteredOrders.map((order) => {
               const orderProducts = normalizeOrderProducts(order);
 
-              console.log("ORDER ITEMS:", order.items);
-              console.log("ORDER PRODUCTS_JSON:", order.products_json);
-              console.log("ORDER PRODUCTS:", orderProducts);
-
               let customerObj: any = order.customer;
               if (typeof customerObj === 'string') {
                 try {
@@ -909,9 +940,14 @@ export default function MyOrdersPage() {
                       <div className="bg-white p-4 rounded-xl border border-neutral-200/80 space-y-2 text-xs">
                         <div className="flex items-center justify-between">
                           <span className="font-bold text-neutral-900">{paymentInfo.label}</span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-700">
-                            {order.paymentStatus || 'Verified'}
-                          </span>
+                          {(() => {
+                            const badge = getOrderPaymentStatusDisplay(order);
+                            return (
+                              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full capitalize border ${badge.className}`}>
+                                {badge.label}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <p className="text-neutral-500 text-[11px]">{paymentInfo.sub}</p>
 

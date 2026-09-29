@@ -299,7 +299,16 @@ export function rowToOrder(row: any): Order {
     notes: customer.notes || row.notes || undefined,
     payment_method: row.payment_method || row.paymentMethod || 'bank_transfer',
     payment_reference: row.payment_reference || row.paymentReference || undefined,
-    paymentStatus: row.payment_status || row.paymentStatus || 'pending',
+    paymentStatus: (() => {
+      const rawStatus = String(row.status || 'Pending Verification').toLowerCase();
+      const rawPayStatus = row.payment_status || row.paymentStatus || 'pending';
+      if (rawStatus === 'approved' || rawStatus === 'dispatched' || rawStatus === 'delivered') {
+        if (rawPayStatus === 'pending') return 'verified' as any;
+      } else if (rawStatus === 'rejected' || rawStatus === 'cancelled') {
+        return 'rejected' as any;
+      }
+      return rawPayStatus as any;
+    })(),
     shippingTier: row.shipping_tier || row.shippingTier || 'standard',
     couponCode: row.coupon_code || row.couponCode || undefined,
     status: (row.status || 'Pending Verification') as OrderStatus,
@@ -1249,12 +1258,40 @@ useEffect(() => {
   }
 };
 
+function resolvePaymentStatusForStatusChange(
+  newStatus: OrderStatus,
+  existingPaymentStatus?: string
+): 'pending' | 'verified' | 'rejected' {
+  const norm = String(newStatus).toLowerCase();
+  if (norm === 'pending verification' || norm === 'pending') {
+    return 'pending';
+  }
+  if (norm === 'approved') {
+    return 'verified';
+  }
+  if (norm === 'rejected' || norm === 'cancelled') {
+    return 'rejected';
+  }
+  if (norm === 'dispatched' || norm === 'delivered' || norm === 'confirmed') {
+    if (existingPaymentStatus === 'rejected') {
+      return 'rejected';
+    }
+    return 'verified';
+  }
+  return (existingPaymentStatus as any) || 'pending';
+}
+
   const approveOrder = async (orderId: string) => {
-    // Update local UI immediately, preserving all existing order properties
+    // Update local UI immediately, preserving all existing order properties and marking paymentStatus as verified
     setOrders((prev) =>
       prev.map((o) =>
         o.id === orderId || o.order_id === orderId
-          ? { ...o, status: 'Approved' }
+          ? {
+              ...o,
+              status: 'Approved',
+              paymentStatus: 'verified' as any,
+              payment_status: 'verified',
+            }
           : o
       )
     );
@@ -1268,6 +1305,7 @@ useEffect(() => {
     try {
       const updatePayload = {
         status: 'Approved',
+        payment_status: 'verified',
         updated_at: new Date().toISOString(),
       };
 
@@ -1276,7 +1314,7 @@ useEffect(() => {
         .from('orders')
         .update(updatePayload)
         .eq('order_id', orderId)
-        .select('id, order_id, status');
+        .select('id, order_id, status, payment_status');
 
       if (firstUpdate.error) {
         console.error(
@@ -1295,7 +1333,7 @@ useEffect(() => {
           .from('orders')
           .update(updatePayload)
           .eq('id', orderId)
-          .select('id, order_id, status');
+          .select('id, order_id, status, payment_status');
 
         if (secondUpdate.error) {
           console.error(
@@ -1330,11 +1368,16 @@ useEffect(() => {
   };
 
   const rejectOrder = async (orderId: string) => {
-    // Update local UI immediately, preserving all existing order properties
+    // Update local UI immediately, preserving all existing order properties and marking paymentStatus as rejected
     setOrders((prev) =>
       prev.map((o) =>
         o.id === orderId || o.order_id === orderId
-          ? { ...o, status: 'Rejected' }
+          ? {
+              ...o,
+              status: 'Rejected',
+              paymentStatus: 'rejected' as any,
+              payment_status: 'rejected',
+            }
           : o
       )
     );
@@ -1342,7 +1385,11 @@ useEffect(() => {
     const supabase = getSupabase();
     if (supabase) {
       try {
-        const updatePayload = { status: 'Rejected', updated_at: new Date().toISOString() };
+        const updatePayload = {
+          status: 'Rejected',
+          payment_status: 'rejected',
+          updated_at: new Date().toISOString(),
+        };
         const res = await supabase.from('orders').update(updatePayload).eq('order_id', orderId);
         if (res.error) {
           await supabase.from('orders').update(updatePayload).eq('id', orderId);
@@ -1361,13 +1408,21 @@ useEffect(() => {
     trackingNumber?: string,
     courier?: string
   ) => {
-    // Update local UI immediately, preserving items, products_json, payment proof, and other properties
+    let resolvedPaymentStatus: 'pending' | 'verified' | 'rejected' = 'verified';
+
+    // Update local UI immediately, preserving items, products_json, payment proof, and resolving payment status
     setOrders((prev) =>
       prev.map((o) => {
         if (o.id === orderId || o.order_id === orderId) {
+          const currentPayStatus = (o as any).payment_status || o.paymentStatus;
+          const newPayStatus = resolvePaymentStatusForStatusChange(status, currentPayStatus);
+          resolvedPaymentStatus = newPayStatus;
+
           return {
             ...o,
             status,
+            paymentStatus: newPayStatus as any,
+            payment_status: newPayStatus,
             trackingNumber: trackingNumber !== undefined ? trackingNumber : o.trackingNumber,
             courier: courier !== undefined ? courier : o.courier,
           };
@@ -1381,6 +1436,7 @@ useEffect(() => {
       try {
         const updates: Record<string, any> = {
           status,
+          payment_status: resolvedPaymentStatus,
           updated_at: new Date().toISOString(),
         };
         if (trackingNumber !== undefined) updates.tracking_number = trackingNumber;
