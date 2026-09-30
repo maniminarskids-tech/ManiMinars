@@ -76,27 +76,35 @@ export default function MyOrdersPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { orders, isOrdersLoading, refreshOrders } = useProducts();
 
-  // Resolve initial customer phone lookup key (from URL or persistent storage)
-  const getInitialPhone = () => {
+  // Resolve initial lookup key from URL search params ONLY if explicitly present (starts EMPTY by default, never restored from localStorage)
+  const getInitialLookup = () => {
     try {
       const urlQuery = searchParams.get('phone') || searchParams.get('q') || searchParams.get('id');
       if (urlQuery) return urlQuery.trim();
-      return (
-        localStorage.getItem('mm_customer_phone') ||
-        localStorage.getItem('mani_minars_customer_phone') ||
-        localStorage.getItem('mani_minars_last_order_query') ||
-        ''
-      );
+      return '';
     } catch {
       return '';
     }
   };
 
-  const initialLookup = getInitialPhone();
+  const initialLookup = getInitialLookup();
   const [customerPhone, setCustomerPhone] = useState<string>(initialLookup);
   const [searchInput, setSearchInput] = useState<string>(initialLookup);
   const [activeSearchQuery, setActiveSearchQuery] = useState<string>(initialLookup);
-  const [searchMode, setSearchMode] = useState<'all' | 'phone' | 'order_id'>('all');
+  const [searchMode, setSearchMode] = useState<'all' | 'phone' | 'order_id'>(() => {
+    if (searchParams.get('id')) return 'order_id';
+    if (searchParams.get('phone')) return 'phone';
+    return 'all';
+  });
+
+  // Switch search mode: clear input, active query, phone state, and URL params
+  const handleModeChange = (mode: 'all' | 'phone' | 'order_id') => {
+    setSearchMode(mode);
+    setSearchInput('');
+    setActiveSearchQuery('');
+    setCustomerPhone('');
+    setSearchParams({});
+  };
 
   // Supabase direct orders state
   const [supabaseOrders, setSupabaseOrders] = useState<Order[]>([]);
@@ -143,19 +151,18 @@ export default function MyOrdersPage() {
   // Sync state if URL query param changes
   useEffect(() => {
     const urlQuery = searchParams.get('phone') || searchParams.get('q') || searchParams.get('id');
-    if (urlQuery && urlQuery !== customerPhone) {
+    if (urlQuery && urlQuery !== (activeSearchQuery || customerPhone)) {
       const trimmed = urlQuery.trim();
       setSearchInput(trimmed);
       setActiveSearchQuery(trimmed);
       setCustomerPhone(trimmed);
-      try {
-        localStorage.setItem('mm_customer_phone', trimmed);
-        localStorage.setItem('mani_minars_customer_phone', trimmed);
-      } catch {
-        // ignore
+      if (searchParams.get('id')) {
+        setSearchMode('order_id');
+      } else if (searchParams.get('phone')) {
+        setSearchMode('phone');
       }
     }
-  }, [searchParams, customerPhone]);
+  }, [searchParams, activeSearchQuery, customerPhone]);
 
   // Load orders directly on mount and listen to realtime status updates
   useEffect(() => {
@@ -201,21 +208,19 @@ export default function MyOrdersPage() {
     }
   };
 
-  // Submit phone lookup
+  // Submit search lookup
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = searchInput.trim();
     setCustomerPhone(trimmed);
     setActiveSearchQuery(trimmed);
     if (trimmed) {
-      setSearchParams({ phone: trimmed });
-      // 5. Orders must remain visible after refresh and browser restart
-      try {
-        localStorage.setItem('mm_customer_phone', trimmed);
-        localStorage.setItem('mani_minars_customer_phone', trimmed);
-        localStorage.setItem('mani_minars_last_order_query', trimmed);
-      } catch {
-        // ignore
+      if (searchMode === 'order_id') {
+        setSearchParams({ id: trimmed });
+      } else if (searchMode === 'phone') {
+        setSearchParams({ phone: trimmed });
+      } else {
+        setSearchParams({ q: trimmed });
       }
     } else {
       setSearchParams({});
@@ -232,25 +237,55 @@ export default function MyOrdersPage() {
   }, [supabaseOrders, orders]);
 
   // 3. Fetch and filter all matching orders from the orders table
-  // 7. Do not remove orders until status is Delivered (all orders matching lookup are shown)
   const filteredOrders = useMemo(() => {
-    const lookup = (customerPhone || activeSearchQuery).trim();
+    const lookup = (activeSearchQuery || customerPhone).trim();
     if (!lookup) {
-      // When no filter is specified, show all store orders from Supabase / cache
-      return sourceOrders;
+      // When no filter is specified, return empty so the initial search screen is shown
+      return [];
     }
 
     const queryDigits = normalizePhoneNumber(lookup);
     const queryLower = lookup.toLowerCase();
+    const cleanQuery = queryLower.replace(/^#/, '').trim();
 
     return sourceOrders.filter((order) => {
-      const orderId = (order.id || (order as any).order_id || '').toLowerCase();
-      const rawCustomerPhone = (order.customer?.phone || (order as any).phone || '').toLowerCase();
-      const customerPhoneDigits = normalizePhoneNumber(rawCustomerPhone);
-      const customerName = (order.customer?.fullName || (order as any).customer_name || '').toLowerCase();
+      const rawOrderId = String(order.id || (order as any).order_id || '').toLowerCase();
+      const cleanOrderId = rawOrderId.replace(/^#/, '');
 
+      let rawPhone = order.customer?.phone || (order as any).phone || '';
+      if (!rawPhone && typeof order.customer === 'string') {
+        try {
+          const parsed = JSON.parse(order.customer);
+          rawPhone = parsed?.phone || '';
+        } catch {
+          // ignore
+        }
+      }
+      const rawCustomerPhone = String(rawPhone).toLowerCase();
+      const customerPhoneDigits = normalizePhoneNumber(rawCustomerPhone);
+
+      // Mode: Order ID - compare against order ID only (do not fall back to phone number)
+      if (searchMode === 'order_id') {
+        return rawOrderId.includes(queryLower) || cleanOrderId.includes(cleanQuery);
+      }
+
+      // Mode: Phone Number - compare against customer phone only
+      if (searchMode === 'phone') {
+        if (queryDigits.length >= 4) {
+          if (customerPhoneDigits.includes(queryDigits)) return true;
+          if (queryDigits.includes(customerPhoneDigits) && customerPhoneDigits.length >= 7) return true;
+          const qEnd = queryDigits.slice(-7);
+          const cEnd = customerPhoneDigits.slice(-7);
+          if (qEnd.length >= 7 && cEnd.length >= 7 && qEnd === cEnd) return true;
+        }
+        return rawCustomerPhone.includes(queryLower);
+      }
+
+      // Mode: Auto Detect ('all') - search Order ID OR Phone Number
       // 1. Order ID match
-      if (orderId.includes(queryLower)) return true;
+      if (rawOrderId.includes(queryLower) || cleanOrderId.includes(cleanQuery)) {
+        return true;
+      }
 
       // 2. Phone number match (normalized Pakistani digits)
       if (queryDigits.length >= 4) {
@@ -262,14 +297,13 @@ export default function MyOrdersPage() {
       }
 
       // 3. Raw phone substring match
-      if (rawCustomerPhone.includes(queryLower)) return true;
-
-      // 4. Customer name match
-      if (queryLower.length >= 3 && customerName.includes(queryLower)) return true;
+      if (rawCustomerPhone && rawCustomerPhone.includes(queryLower)) {
+        return true;
+      }
 
       return false;
     });
-  }, [sourceOrders, customerPhone, activeSearchQuery]);
+  }, [sourceOrders, customerPhone, activeSearchQuery, searchMode]);
 
   // Determine timeline step progression based on normalized status
   const getStepStatus = (orderStatus: string, stepKey: string) => {
@@ -489,7 +523,7 @@ export default function MyOrdersPage() {
             <div className="flex items-center rounded-xl bg-neutral-100 p-1 text-xs font-semibold">
               <button
                 type="button"
-                onClick={() => setSearchMode('all')}
+                onClick={() => handleModeChange('all')}
                 className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                   searchMode === 'all'
                     ? 'bg-white text-neutral-900 shadow-2xs'
@@ -500,7 +534,7 @@ export default function MyOrdersPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setSearchMode('order_id')}
+                onClick={() => handleModeChange('order_id')}
                 className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                   searchMode === 'order_id'
                     ? 'bg-white text-neutral-900 shadow-2xs'
@@ -511,7 +545,7 @@ export default function MyOrdersPage() {
               </button>
               <button
                 type="button"
-                onClick={() => setSearchMode('phone')}
+                onClick={() => handleModeChange('phone')}
                 className={`px-3 py-1.5 rounded-lg transition-colors cursor-pointer ${
                   searchMode === 'phone'
                     ? 'bg-white text-neutral-900 shadow-2xs'
@@ -556,44 +590,6 @@ export default function MyOrdersPage() {
                 <span>Track Order</span>
               </button>
             </div>
-
-            {/* Quick Helper / Example chips */}
-            <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-neutral-500">
-              <span className="font-medium">Try searching:</span>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchInput('MM-94821');
-                  setActiveSearchQuery('MM-94821');
-                  setSearchParams({ q: 'MM-94821' });
-                }}
-                className="text-[11px] font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
-              >
-                MM-94821
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchInput('03004829182');
-                  setActiveSearchQuery('03004829182');
-                  setSearchParams({ q: '03004829182' });
-                }}
-                className="text-[11px] font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
-              >
-                03004829182
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchInput('03219482019');
-                  setActiveSearchQuery('03219482019');
-                  setSearchParams({ q: '03219482019' });
-                }}
-                className="text-[11px] font-semibold text-neutral-700 bg-neutral-100 hover:bg-neutral-200 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
-              >
-                03219482019
-              </button>
-            </div>
           </form>
         </section>
 
@@ -606,7 +602,7 @@ export default function MyOrdersPage() {
             </div>
             <h3 className="font-bold text-lg text-neutral-900">Track Your Mani Minars Orders</h3>
             <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-              Enter your <strong>Phone Number</strong> (e.g., 0300 1234567) in the box above to view all matching orders, real-time verification, and parcel progress directly from Supabase.
+              Enter your <strong>{searchMode === 'order_id' ? 'Order ID' : searchMode === 'phone' ? 'Phone Number' : 'Phone Number or Order ID'}</strong> in the box above to view your matching orders, real-time verification, and parcel progress directly from Supabase.
             </p>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <a
@@ -628,7 +624,7 @@ export default function MyOrdersPage() {
             </div>
             <h3 className="font-bold text-lg text-neutral-900">No Orders Found</h3>
             <p className="text-xs sm:text-sm text-neutral-600 leading-relaxed">
-              We couldn't find any orders matching <strong>"{customerPhone || activeSearchQuery}"</strong>. Please verify the mobile number provided during checkout.
+              We couldn't find any orders matching <strong>"{customerPhone || activeSearchQuery}"</strong>. Please verify the mobile number or order ID provided.
             </p>
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
@@ -638,13 +634,6 @@ export default function MyOrdersPage() {
                   setCustomerPhone('');
                   setActiveSearchQuery('');
                   setSearchParams({});
-                  try {
-                    localStorage.removeItem('mm_customer_phone');
-                    localStorage.removeItem('mani_minars_customer_phone');
-                    localStorage.removeItem('mani_minars_last_order_query');
-                  } catch {
-                    // ignore
-                  }
                 }}
                 className="px-4 py-2 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-xs font-semibold transition-colors cursor-pointer"
               >
