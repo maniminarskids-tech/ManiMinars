@@ -535,10 +535,7 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
           image: finalImage,
         },
       ],
-      images: [
-        finalImage,
-        'https://images.unsplash.com/photo-1503944583220-79d8926ad5e2?auto=format&fit=crop&w=800&q=80',
-      ],
+      images: [finalImage],
       description: productForm.description,
       details: productForm.details,
       fabric: productForm.fabric,
