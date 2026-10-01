@@ -63,6 +63,7 @@ export const CheckoutPage: React.FC = () => {
   const [orderId, setOrderId] = useState('');
   const [submittedReference, setSubmittedReference] = useState('');
   const [submittedScreenshot, setSubmittedScreenshot] = useState<string | null>(null);
+  const [submittedTotal, setSubmittedTotal] = useState(0);
 
   const pakistanCities = [
     'Lahore',
@@ -226,6 +227,7 @@ if (lightItems.length === 0) {
 
   try {
     await addOrder(newOrder);
+    setSubmittedTotal(total);
 
     // Success → clear form
     setFormData({ fullName: '', phone: '', email: '', city: '', address: '', notes: '' });
@@ -277,7 +279,7 @@ if (lightItems.length === 0) {
     const whatsappMessage = `Assalam-o-Alaikum Mani Minars! 👋
 I have placed Order #${orderId} on your store:
 
-💰 *Total Amount:* PKR ${total.toLocaleString()}
+💰 *Total Amount:* PKR ${submittedTotal.toLocaleString()}
 💳 *Payment Method:* ${paymentMethodLabel}
 ${submittedReference ? `🔖 *Payment Reference / TID:* ${submittedReference}\n` : ''}👤 *Customer:* ${customerDisplayName}
 📞 *Phone:* ${customerDisplayPhone}
@@ -389,7 +391,7 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
               </div>
               <div className="flex justify-between border-t border-neutral-200 pt-2.5 text-sm font-bold text-neutral-900">
                 <span>Total Amount Payable:</span>
-                <span className="text-[#E84D3D]">PKR {total.toLocaleString()}</span>
+                <span className="text-[#E84D3D]">PKR {submittedTotal.toLocaleString()}</span>
               </div>
             </div>
 
