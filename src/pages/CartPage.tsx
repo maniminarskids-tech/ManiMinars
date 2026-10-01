@@ -26,6 +26,8 @@ export const CartPage: React.FC = () => {
     clearCart,
     subtotal,
     deliveryFee,
+    shippingTier,
+    setShippingTier,
     total,
     discount,
     promoCode,
@@ -253,11 +255,12 @@ export const CartPage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <button
                     type="button"
-                    onClick={() => {
-                      const { setShippingTier } = useCart();
-                      setShippingTier('standard');
-                    }}
-                    className="p-3 rounded-xl border text-left transition-all border-neutral-900 bg-neutral-50/50"
+                    onClick={() => setShippingTier('standard')}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      shippingTier === 'standard'
+                        ? 'border-neutral-900 bg-neutral-50/50'
+                        : 'border-neutral-200 hover:border-neutral-300'
+                    }`}
                   >
                     <p className="font-bold text-neutral-900">Standard</p>
                     <p className="text-[11px] text-neutral-500">2–4 business days</p>
@@ -267,11 +270,12 @@ export const CartPage: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      const { setShippingTier } = useCart();
-                      setShippingTier('express');
-                    }}
-                    className="p-3 rounded-xl border text-left transition-all border-neutral-200 hover:border-neutral-300"
+                    onClick={() => setShippingTier('express')}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      shippingTier === 'express'
+                        ? 'border-neutral-900 bg-neutral-50/50'
+                        : 'border-neutral-200 hover:border-neutral-300'
+                    }`}
                   >
                     <p className="font-bold text-neutral-900">Express Air</p>
                     <p className="text-[11px] text-neutral-500">1–2 business days</p>
@@ -282,7 +286,7 @@ export const CartPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Promo Code Input & Popular Chips */}
+              {/* Promo Code Input */}
               <div>
                 <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider mb-2">
                   Promo / Coupon Code
@@ -301,38 +305,21 @@ export const CartPage: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    <form onSubmit={handleApply} className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="e.g. MANI10"
-                        value={promoInput}
-                        onChange={(e) => setPromoInput(e.target.value)}
-                        className="flex-1 text-xs uppercase px-3 py-2.5 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] focus:border-transparent"
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-2.5 bg-neutral-900 hover:bg-black text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
-                      >
-                        Apply
-                      </button>
-                    </form>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {['MANI10', 'WELCOME500', 'LITTLELOOM'].map((c) => (
-                        <button
-                          key={c}
-                          type="button"
-                          onClick={() => {
-                            const res = applyPromoCode(c);
-                            setPromoMsg({ text: res.message, isError: !res.success });
-                          }}
-                          className="text-[10px] px-2 py-1 rounded-md bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-mono font-medium transition-colors cursor-pointer"
-                        >
-                          Use {c}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <form onSubmit={handleApply} className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Enter coupon code"
+                      value={promoInput}
+                      onChange={(e) => setPromoInput(e.target.value)}
+                      className="flex-1 text-xs uppercase px-3 py-2.5 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] focus:border-transparent"
+                    />
+                    <button
+                      type="submit"
+                      className="px-4 py-2.5 bg-neutral-900 hover:bg-black text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer"
+                    >
+                      Apply
+                    </button>
+                  </form>
                 )}
                 {promoMsg && (
                   <p

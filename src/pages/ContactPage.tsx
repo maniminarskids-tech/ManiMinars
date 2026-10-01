@@ -109,14 +109,10 @@ export const ContactPage: React.FC = () => {
                 <span>Flagship Design Studios</span>
               </h3>
 
-              <div className="text-xs space-y-3 divide-y divide-neutral-100">
-                <div className="pt-2 first:pt-0">
-                  <p className="font-bold text-neutral-900">Lahore Design Studio</p>
-                  <p className="text-neutral-500">M.M. Alam Road, Gulberg III, Lahore, Pakistan</p>
-                </div>
-                <div className="pt-2">
-                  <p className="font-bold text-neutral-900">Karachi Studio & Fitting Salon</p>
-                  <p className="text-neutral-500">Bukhari Commercial Area, Phase 6, DHA, Karachi</p>
+              <div className="text-xs space-y-3">
+                <div>
+                  <p className="font-bold text-neutral-900">Mani Minars</p>
+                  <p className="text-neutral-500">2nd Avenue Mall, Kareem Market, Lahore</p>
                 </div>
               </div>
             </div>

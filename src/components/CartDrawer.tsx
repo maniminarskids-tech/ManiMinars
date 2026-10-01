@@ -242,42 +242,21 @@ export const CartDrawer: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <form onSubmit={handleApplyPromo} className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Enter promo code..."
-                      value={codeInputValue}
-                      onChange={(e) => setCodeInputValue(e.target.value)}
-                      className="flex-1 uppercase text-xs px-3 py-2 border border-neutral-200 rounded-xl outline-none focus:ring-1 focus:ring-neutral-400"
-                    />
-                    <button
-                      type="submit"
-                      className="text-xs px-3.5 py-2 bg-neutral-900 hover:bg-black text-white font-semibold rounded-xl transition-colors cursor-pointer"
-                    >
-                      Apply
-                    </button>
-                  </form>
-                  {/* Quick coupon suggestions */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                    <span className="text-[10px] text-neutral-400 font-semibold uppercase tracking-wider">
-                      Popular:
-                    </span>
-                    {['MANI10', 'WELCOME500'].map((code) => (
-                      <button
-                        key={code}
-                        type="button"
-                        onClick={() => {
-                          const res = applyPromoCode(code);
-                          setPromoMessage({ text: res.message, isError: !res.success });
-                        }}
-                        className="text-[10px] px-2 py-0.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-mono font-bold transition-colors cursor-pointer"
-                      >
-                        +{code}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <form onSubmit={handleApplyPromo} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Enter promo code"
+                    value={codeInputValue}
+                    onChange={(e) => setCodeInputValue(e.target.value)}
+                    className="flex-1 uppercase text-xs px-3 py-2 border border-neutral-200 rounded-xl outline-none focus:ring-1 focus:ring-neutral-400"
+                  />
+                  <button
+                    type="submit"
+                    className="text-xs px-3.5 py-2 bg-neutral-900 hover:bg-black text-white font-semibold rounded-xl transition-colors cursor-pointer"
+                  >
+                    Apply
+                  </button>
+                </form>
               )}
               {promoMessage && (
                 <p
