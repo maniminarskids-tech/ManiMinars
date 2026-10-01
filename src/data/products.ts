@@ -54,7 +54,7 @@ export const PRODUCTS: Product[] = [
     originalPrice: 3600,
     isSale: true,
     ageGroup: 'kids',
-    category: 'dresses',
+    category: 'tops',
     sizes: ['2-3Y', '3-4Y', '5-6Y', '7-8Y', '9-10Y'],
     colors: [
       {
@@ -91,7 +91,7 @@ export const PRODUCTS: Product[] = [
     price: 3850,
     isNew: true,
     ageGroup: 'kids',
-    category: 'hoodies-jackets',
+    category: 'jackets',
     sizes: ['1-2Y', '3-4Y', '5-6Y', '7-8Y', '9-10Y'],
     colors: [
       {
@@ -172,7 +172,7 @@ export const PRODUCTS: Product[] = [
     price: 3950,
     isNew: true,
     ageGroup: 'kids',
-    category: 'knitwear',
+    category: 'jackets',
     sizes: ['1-2Y', '3-4Y', '5-6Y', '7-8Y', '9-10Y'],
     colors: [
       {
@@ -210,7 +210,7 @@ export const PRODUCTS: Product[] = [
     originalPrice: 6200,
     isSale: true,
     ageGroup: 'kids',
-    category: 'dresses',
+    category: 'tops',
     sizes: ['2-3Y', '4-5Y', '6-7Y', '8-9Y', '9-10Y'],
     colors: [
       {
@@ -249,7 +249,7 @@ export const PRODUCTS: Product[] = [
     isNew: true,
     isSale: true,
     ageGroup: 'juniors',
-    category: 'hoodies-jackets',
+    category: 'jackets',
     sizes: ['11-12Y', '13-14Y', '15-16Y'],
     colors: [
       {
@@ -292,7 +292,7 @@ export const PRODUCTS: Product[] = [
     price: 3650,
     isNew: true,
     ageGroup: 'juniors',
-    category: 'tops',
+    category: 't-shirts',
     sizes: ['11-12Y', '13-14Y', '15-16Y'],
     colors: [
       {
@@ -330,7 +330,7 @@ export const PRODUCTS: Product[] = [
     isNew: false,
     isSale: false,
     ageGroup: 'juniors',
-    category: 'bottoms',
+    category: 'cargo',
     sizes: ['11-12Y', '13-14Y', '15-16Y'],
     colors: [
       {
@@ -368,7 +368,7 @@ export const PRODUCTS: Product[] = [
     originalPrice: 5200,
     isSale: true,
     ageGroup: 'juniors',
-    category: 'tops',
+    category: 'casual-shirts',
     sizes: ['11-12Y', '13-14Y', '15-16Y'],
     colors: [
       {
@@ -405,7 +405,7 @@ export const PRODUCTS: Product[] = [
     price: 3250,
     isNew: true,
     ageGroup: 'kids',
-    category: 'dresses',
+    category: 'tops',
     sizes: ['1-2Y', '3-4Y', '5-6Y', '7-8Y'],
     colors: [
       {
@@ -443,7 +443,7 @@ export const PRODUCTS: Product[] = [
     originalPrice: 4800,
     isSale: true,
     ageGroup: 'juniors',
-    category: 'hoodies-jackets',
+    category: 'jackets',
     sizes: ['11-12Y', '13-14Y', '15-16Y'],
     colors: [
       {
@@ -477,12 +477,15 @@ export const PRODUCTS: Product[] = [
 
 export const CATEGORIES: { id: string; name: string }[] = [
   { id: 'all', name: 'All Pieces' },
-  { id: 'sets', name: 'Co-ord Sets' },
-  { id: 'dresses', name: 'Dresses & Frocks' },
-  { id: 'hoodies-jackets', name: 'Hoodies & Jackets' },
-  { id: 'tops', name: 'Tops & Tees' },
-  { id: 'bottoms', name: 'Pants & Cargo' },
-  { id: 'knitwear', name: 'Knitwear' },
+  { id: 'casual-shirts', name: 'Casual Shirts' },
+  { id: 'pants', name: 'Pants' },
+  { id: 't-shirts', name: 'T-Shirts' },
+  { id: 'cargo', name: 'Cargo' },
+  { id: 'shorts', name: 'Shorts' },
+  { id: 'tops', name: 'Tops' },
+  { id: 'sets', name: 'Sets' },
+  { id: 'jackets', name: 'Jackets' },
+  { id: 'accessories', name: 'Accessories' },
 ];
 
 export const ALL_SIZES = [

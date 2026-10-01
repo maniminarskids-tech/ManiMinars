@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Product, FilterState, SortOption } from '../types';
+import { Product, FilterState, SortOption, formatCategory } from '../types';
 import { PRICE_RANGES } from '../data/products';
 
 export function useFilteredProducts(
@@ -29,7 +29,16 @@ export function useFilteredProducts(
 
     // Filter by Category
     if (filters.category && filters.category !== 'all') {
-      result = result.filter((p) => p.category === filters.category);
+      const selected = filters.category;
+      result = result.filter((p) => {
+        if (p.category === selected) return true;
+        // Backward-compatibility aliases for existing legacy product data
+        if (selected === 'jackets' && p.category === 'hoodies-jackets') return true;
+        if (selected === 'pants' && p.category === 'bottoms') return true;
+        if (selected === 'cargo' && p.category === 'bottoms') return true;
+        if (selected === 'tops' && (p.category === 'dresses' || p.category === 'knitwear')) return true;
+        return false;
+      });
     }
 
     // Filter by Size
@@ -65,6 +74,8 @@ export function useFilteredProducts(
         (p) =>
           p.name.toLowerCase().includes(q) ||
           p.tagline.toLowerCase().includes(q) ||
+          (p.category || '').toLowerCase().includes(q) ||
+          formatCategory(p.category).toLowerCase().includes(q) ||
           p.description.toLowerCase().includes(q)
       );
     }

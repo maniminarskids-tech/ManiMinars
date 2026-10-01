@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useProducts, FALLBACK_GARMENT_IMAGE } from '../context/ProductContext';
-import { Product, Order, OrderStatus, Category, AgeGroup, Coupon } from '../types';
+import { Product, Order, OrderStatus, Category, AgeGroup, Coupon, formatCategory } from '../types';
 import { logoutAdmin, ADMIN_PASSCODE } from '../utils/security';
 import { getSupabase } from '../services/supabase';
 export { ADMIN_PASSCODE };
@@ -263,7 +263,7 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
     isSale: false,
     isNew: true,
     ageGroup: 'kids' as AgeGroup,
-    category: 'sets' as Category,
+    category: 'casual-shirts' as Category,
     sizes: ['2-3Y', '3-4Y', '4-5Y'],
     fabric: '100% Combed Pakistani Cotton',
     imageUrl:
@@ -450,7 +450,7 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
       isSale: false,
       isNew: true,
       ageGroup: 'kids',
-      category: 'sets',
+      category: 'casual-shirts',
       sizes: ['2-3Y', '3-4Y', '4-5Y', '5-6Y'],
       fabric: '100% Combed Pakistani Cotton',
       imageUrl: '',
@@ -484,7 +484,15 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
       isSale: !!product.isSale,
       isNew: !!product.isNew,
       ageGroup: product.ageGroup,
-      category: product.category,
+      category: (
+        product.category === 'hoodies-jackets'
+          ? 'jackets'
+          : product.category === 'bottoms'
+          ? 'pants'
+          : product.category === 'dresses' || product.category === 'knitwear'
+          ? 'tops'
+          : product.category || 'casual-shirts'
+      ) as Category,
       sizes: product.sizes && product.sizes.length > 0 ? product.sizes : ['3-4Y', '5-6Y'],
       fabric: product.fabric,
       imageUrl: product.images[0] || '',
@@ -569,6 +577,7 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
   const filteredProducts = products.filter(
     (p) =>
       (p.name ?? '').toLowerCase().includes((productSearch ?? '').toLowerCase()) ||
+      (formatCategory(p.category) ?? '').toLowerCase().includes((productSearch ?? '').toLowerCase()) ||
       (p.category ?? '').toLowerCase().includes((productSearch ?? '').toLowerCase()) ||
       (p.ageGroup ?? '').toLowerCase().includes((productSearch ?? '').toLowerCase())
   );
@@ -577,6 +586,7 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
   const filteredInventory = products.filter(
     (p) =>
       (p.name ?? '').toLowerCase().includes((inventorySearch ?? '').toLowerCase()) ||
+      (formatCategory(p.category) ?? '').toLowerCase().includes((inventorySearch ?? '').toLowerCase()) ||
       (p.category ?? '').toLowerCase().includes((inventorySearch ?? '').toLowerCase()) ||
       ((p.sku ?? '').toLowerCase().includes((inventorySearch ?? '').toLowerCase()))
   );
@@ -943,8 +953,8 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
                           </span>
                         </td>
 
-                        <td className="py-3.5 px-4 font-medium text-neutral-600 uppercase text-[11px]">
-                          {prod.category}
+                        <td className="py-3.5 px-4 font-medium text-neutral-600 text-xs">
+                          {formatCategory(prod.category)}
                         </td>
 
                         <td className="py-3.5 px-4 font-bold text-neutral-900">
@@ -1951,12 +1961,14 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                     }
                     className="w-full px-3 py-2 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] bg-white cursor-pointer"
                   >
-                    <option value="sets">Sets & Coordinates</option>
-                    <option value="dresses">Dresses & Frocks</option>
-                    <option value="tops">Tees & Polos</option>
-                    <option value="hoodies-jackets">Hoodies & Jackets</option>
-                    <option value="knitwear">Knitwear</option>
-                    <option value="bottoms">Bottoms & Cargos</option>
+                    <option value="casual-shirts">Casual Shirts</option>
+                    <option value="pants">Pants</option>
+                    <option value="t-shirts">T-Shirts</option>
+                    <option value="cargo">Cargo</option>
+                    <option value="shorts">Shorts</option>
+                    <option value="tops">Tops</option>
+                    <option value="sets">Sets</option>
+                    <option value="jackets">Jackets</option>
                     <option value="accessories">Accessories</option>
                   </select>
                 </div>

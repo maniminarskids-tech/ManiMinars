@@ -1,13 +1,61 @@
 export type AgeGroup = 'kids' | 'juniors';
 
 export type Category = 
-  | 'sets'
-  | 'dresses'
+  | 'casual-shirts'
+  | 'pants'
+  | 't-shirts'
+  | 'cargo'
+  | 'shorts'
   | 'tops'
+  | 'sets'
+  | 'jackets'
+  | 'accessories'
+  // Legacy values preserved for backward-compatibility with existing stored data
+  | 'dresses'
   | 'hoodies-jackets'
   | 'knitwear'
-  | 'bottoms'
-  | 'accessories';
+  | 'bottoms';
+
+export const PRODUCT_CATEGORIES = [
+  { id: 'casual-shirts', label: 'Casual Shirts' },
+  { id: 'pants', label: 'Pants' },
+  { id: 't-shirts', label: 'T-Shirts' },
+  { id: 'cargo', label: 'Cargo' },
+  { id: 'shorts', label: 'Shorts' },
+  { id: 'tops', label: 'Tops' },
+  { id: 'sets', label: 'Sets' },
+  { id: 'jackets', label: 'Jackets' },
+  { id: 'accessories', label: 'Accessories' },
+] as const;
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  'casual-shirts': 'Casual Shirts',
+  pants: 'Pants',
+  't-shirts': 'T-Shirts',
+  cargo: 'Cargo',
+  shorts: 'Shorts',
+  tops: 'Tops',
+  sets: 'Sets',
+  jackets: 'Jackets',
+  accessories: 'Accessories',
+  // Backward compatibility labels for existing legacy records
+  'hoodies-jackets': 'Jackets',
+  bottoms: 'Pants',
+  dresses: 'Tops',
+  knitwear: 'Tops',
+};
+
+export function formatCategory(cat: string | undefined | null): string {
+  if (!cat) return 'Sets';
+  const lower = cat.toLowerCase();
+  if (CATEGORY_LABELS[lower]) {
+    return CATEGORY_LABELS[lower];
+  }
+  return cat
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ');
+}
 
 export interface Product {
   id: string;

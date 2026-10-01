@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SlidersHorizontal, X, RotateCcw, ChevronDown, Check } from 'lucide-react';
-import { FilterState, SortOption } from '../types';
+import { FilterState, SortOption, formatCategory } from '../types';
 import { CATEGORIES, ALL_SIZES, ALL_COLORS, PRICE_RANGES } from '../data/products';
 
 interface FiltersProps {
@@ -253,7 +253,7 @@ export const Filters: React.FC<FiltersProps> = ({
           <span className="text-xs text-neutral-400">Active:</span>
           {filters.category !== 'all' && (
             <span className="inline-flex items-center gap-1 text-xs bg-neutral-100 text-neutral-800 px-2.5 py-0.5 rounded-full font-medium">
-              Category: {filters.category}
+              Category: {formatCategory(filters.category)}
               <button onClick={() => handleCategoryClick(filters.category)}>
                 <X className="w-3 h-3 text-neutral-500 hover:text-black" />
               </button>

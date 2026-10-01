@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, X, ArrowRight, Sparkles } from 'lucide-react';
 import { useProducts, FALLBACK_GARMENT_IMAGE } from '../context/ProductContext';
-import { Product } from '../types';
+import { Product, formatCategory } from '../types';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -40,7 +40,8 @@ export const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose }) => 
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.tagline.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
+        (p.category || '').toLowerCase().includes(q) ||
+        formatCategory(p.category).toLowerCase().includes(q) ||
         p.description.toLowerCase().includes(q)
     );
     setResults(matched);
