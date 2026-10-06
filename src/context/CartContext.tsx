@@ -6,7 +6,7 @@ interface CartContextType {
   addToCart: (
     product: Product,
     selectedSize: string,
-    selectedColor: { name: string; hex: string },
+    selectedColor: { name: string; hex: string; image?: string },
     quantity?: number
   ) => { success: boolean; message?: string };
   updateQuantity: (itemId: string, quantity: number) => { success: boolean; message?: string };
@@ -102,7 +102,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addToCart = (
     product: Product,
     selectedSize: string,
-    selectedColor: { name: string; hex: string },
+    selectedColor: { name: string; hex: string; image?: string },
     quantity = 1
   ): { success: boolean; message?: string } => {
     const availableStock = product.stockQuantity ?? 15;
@@ -112,6 +112,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     let success = true;
     let message: string | undefined;
+
+    const matchedColorImage =
+      selectedColor.image ||
+      product.colors?.find((c) => c.name === selectedColor.name)?.image ||
+      product.images?.[0];
 
     setCart((prev) => {
       const existingItemIndex = prev.findIndex(
@@ -146,7 +151,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           productId: product.id,
           product,
           selectedSize,
-          selectedColor,
+          selectedColor: {
+            name: selectedColor.name,
+            hex: selectedColor.hex,
+            image: matchedColorImage,
+          },
           quantity,
           price: product.price,
         };

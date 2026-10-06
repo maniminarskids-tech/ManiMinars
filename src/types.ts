@@ -57,6 +57,12 @@ export function formatCategory(cat: string | undefined | null): string {
     .join(' ');
 }
 
+export interface ProductColor {
+  name: string;
+  hex: string;
+  image: string;
+}
+
 export interface Product {
   id: string;
   sku?: string;
@@ -69,11 +75,7 @@ export interface Product {
   ageGroup: AgeGroup;
   category: Category;
   sizes: string[];
-  colors: {
-    name: string;
-    hex: string;
-    image: string;
-  }[];
+  colors: ProductColor[];
   images: string[];
   description: string;
   details: string[];
@@ -93,6 +95,7 @@ export interface CartItem {
   selectedColor: {
     name: string;
     hex: string;
+    image?: string;
   };
   quantity: number;
   price: number;

@@ -91,8 +91,8 @@ export const ProductDetailPage: React.FC = () => {
   // Active gallery images, putting selected color image first
   const activeGalleryImages = [
     currentColor?.image,
-    ...(product.images || []),
     ...(product.colors || []).map((c) => c.image),
+    ...(product.images || []),
   ].filter(Boolean) as string[];
   const uniqueGalleryImages = Array.from(new Set(activeGalleryImages));
 
@@ -121,7 +121,7 @@ export const ProductDetailPage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 mb-16">
           {/* Left: Gallery (7 Cols on desktop) */}
           <div className="lg:col-span-7">
-            <ProductGallery images={uniqueGalleryImages} productName={product.name} />
+            <ProductGallery key={`${product.id}-${selectedColorIndex}-${currentColor?.image}`} images={uniqueGalleryImages} productName={product.name} />
           </div>
 
           {/* Right: Actions & Buying Box (5 Cols on desktop) */}
@@ -181,24 +181,35 @@ export const ProductDetailPage: React.FC = () => {
                 <span className="text-xs font-bold uppercase tracking-wider text-neutral-700">
                   Color Shade: <strong className="text-neutral-900">{currentColor.name}</strong>
                 </span>
+                {product.colors && product.colors.length > 1 && (
+                  <span className="text-[11px] text-neutral-400 font-medium">
+                    {product.colors.length} shades available
+                  </span>
+                )}
               </div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
                 {product.colors.map((color, idx) => (
                   <button
-                    key={color.name}
+                    key={`${color.name}-${idx}`}
+                    type="button"
                     onClick={() => setSelectedColorIndex(idx)}
-                    className={`w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all cursor-pointer ${
                       selectedColorIndex === idx
-                        ? 'border-[#1E1E1E] scale-110 shadow-sm ring-2 ring-neutral-300 ring-offset-2'
-                        : 'border-transparent hover:scale-105 opacity-80 hover:opacity-100'
+                        ? 'border-[#1E1E1E] bg-[#1E1E1E] text-white shadow-xs'
+                        : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300 hover:bg-neutral-50'
                     }`}
-                    style={{ backgroundColor: color.hex }}
                     title={color.name}
                     aria-label={`Select color ${color.name}`}
                   >
-                    {selectedColorIndex === idx && (
-                      <Check className="w-4 h-4 text-white drop-shadow-sm" />
-                    )}
+                    <span
+                      className="w-3.5 h-3.5 rounded-full border border-neutral-300/80 shadow-2xs shrink-0 flex items-center justify-center"
+                      style={{ backgroundColor: color.hex }}
+                    >
+                      {selectedColorIndex === idx && (
+                        <Check className="w-2.5 h-2.5 text-white drop-shadow-sm" />
+                      )}
+                    </span>
+                    <span className="text-xs font-semibold">{color.name}</span>
                   </button>
                 ))}
               </div>

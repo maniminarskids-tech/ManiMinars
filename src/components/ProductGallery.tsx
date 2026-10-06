@@ -46,6 +46,8 @@ export const ProductGallery: React.FC<ProductGalleryProps> = ({ images, productN
               src={img}
               alt={`${productName} view ${idx + 1}`}
               className="w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
               referrerPolicy="no-referrer"
               onError={(e) => {
                 const target = e.currentTarget as HTMLImageElement;

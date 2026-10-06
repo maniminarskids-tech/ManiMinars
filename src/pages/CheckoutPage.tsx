@@ -64,6 +64,7 @@ export const CheckoutPage: React.FC = () => {
   const [submittedReference, setSubmittedReference] = useState('');
   const [submittedScreenshot, setSubmittedScreenshot] = useState<string | null>(null);
   const [submittedTotal, setSubmittedTotal] = useState(0);
+  const [submittedItems, setSubmittedItems] = useState<any[]>([]);
 
   const pakistanCities = [
     'Lahore',
@@ -190,6 +191,7 @@ export const CheckoutPage: React.FC = () => {
 }
 
 const lightItems = toLightweightOrderItems(cart);
+setSubmittedItems(lightItems);
 
 if (lightItems.length === 0) {
   setPaymentError(
@@ -276,9 +278,21 @@ if (lightItems.length === 0) {
       ? `${submittedCustomer.address}, ${submittedCustomer.city}`
       : '';
 
+    const itemsSummaryText =
+      submittedItems.length > 0
+        ? `\n📦 *Order Items:*\n` +
+          submittedItems
+            .map(
+              (it: any, i: number) =>
+                `${i + 1}. ${it.name}\n   • Size: ${it.selectedSize} | Color: ${it.selectedColor?.name || 'Standard'}\n   • Qty: ${it.quantity} x PKR ${it.price.toLocaleString()}`
+            )
+            .join('\n') +
+          `\n`
+        : '';
+
     const whatsappMessage = `Assalam-o-Alaikum Mani Minars! 👋
 I have placed Order #${orderId} on your store:
-
+${itemsSummaryText}
 💰 *Total Amount:* PKR ${submittedTotal.toLocaleString()}
 💳 *Payment Method:* ${paymentMethodLabel}
 ${submittedReference ? `🔖 *Payment Reference / TID:* ${submittedReference}\n` : ''}👤 *Customer:* ${customerDisplayName}
@@ -389,6 +403,52 @@ I am attaching my payment proof screenshot for verification. Please confirm my o
                   {submittedCustomer?.address || ''}, {submittedCustomer?.city || ''}
                 </span>
               </div>
+              {submittedItems.length > 0 && (
+                <div className="border-t border-neutral-200/80 pt-2.5 space-y-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 block">
+                    Ordered Pieces ({submittedItems.length}):
+                  </span>
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                    {submittedItems.map((it: any, i: number) => (
+                      <div
+                        key={it.id || i}
+                        className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white border border-neutral-200/70"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          {it.image && (
+                            <img
+                              src={it.image}
+                              alt={it.name}
+                              className="w-9 h-9 rounded-lg object-cover border border-neutral-200 shrink-0"
+                            />
+                          )}
+                          <div className="min-w-0 text-left">
+                            <span className="font-bold text-neutral-900 block truncate leading-tight">
+                              {it.name}
+                            </span>
+                            <div className="flex items-center gap-1.5 text-[10px] text-neutral-500 mt-0.5">
+                              <span>Size: {it.selectedSize}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                {it.selectedColor?.hex && (
+                                  <span
+                                    className="w-2 h-2 rounded-full border border-neutral-300 inline-block"
+                                    style={{ backgroundColor: it.selectedColor.hex }}
+                                  />
+                                )}
+                                <span>{it.selectedColor?.name || 'Standard'}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <span className="font-semibold text-neutral-900 shrink-0 text-right">
+                          {it.quantity}x
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between border-t border-neutral-200 pt-2.5 text-sm font-bold text-neutral-900">
                 <span>Total Amount Payable:</span>
                 <span className="text-[#E84D3D]">PKR {submittedTotal.toLocaleString()}</span>

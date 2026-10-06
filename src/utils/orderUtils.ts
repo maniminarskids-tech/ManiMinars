@@ -269,6 +269,7 @@ export function toLightweightOrderItems(items: any[]): any[] {
 
     const image =
       selectedColor.image ||
+      product.colors?.find((c: any) => c.name === selectedColor.name)?.image ||
       product.images?.[0] ||
       product.image ||
       item.image ||
@@ -286,6 +287,7 @@ export function toLightweightOrderItems(items: any[]): any[] {
       selectedColor: {
         name: selectedColor.name || item.colorName || 'Standard',
         hex: selectedColor.hex || undefined,
+        image: typeof image === 'string' ? image : undefined,
       },
       quantity,
       unitPrice,

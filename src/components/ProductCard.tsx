@@ -36,6 +36,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
     const res = addToCart(product, defaultSize, {
       name: activeColor.name,
       hex: activeColor.hex,
+      image: activeColor.image,
     });
 
     if (res.success) {
@@ -46,9 +47,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onQuickView }
       }, 1200);
     } else {
       setIsQuickAdding(false);
-      if (res.message) {
-        alert(res.message);
-      }
+      // Suppress alert to comply with environment constraints
     }
   };
 

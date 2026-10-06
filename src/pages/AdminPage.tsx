@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useProducts, FALLBACK_GARMENT_IMAGE } from '../context/ProductContext';
-import { Product, Order, OrderStatus, Category, AgeGroup, Coupon, formatCategory } from '../types';
+import { Product, Order, OrderStatus, Category, AgeGroup, Coupon, formatCategory, ProductColor } from '../types';
 import { logoutAdmin, ADMIN_PASSCODE } from '../utils/security';
 import { getSupabase } from '../services/supabase';
 export { ADMIN_PASSCODE };
@@ -46,6 +46,7 @@ import {
   Database,
   ChevronDown,
   ChevronUp,
+  Palette,
 } from 'lucide-react';
 
 const KIDS_PRESET_SIZES = ['1-2Y', '2-3Y', '3-4Y', '4-5Y', '5-6Y', '6-7Y', '7-8Y', '8-9Y', '9-10Y'];
@@ -266,10 +267,14 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
     category: 'casual-shirts' as Category,
     sizes: ['2-3Y', '3-4Y', '4-5Y'],
     fabric: '100% Combed Pakistani Cotton',
-    imageUrl:
-      'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=800&q=80',
-    colorName: 'Sunset Coral',
-    colorHex: '#E84D3D',
+    colors: [
+      {
+        name: 'Sunset Coral',
+        hex: '#E84D3D',
+        image:
+          'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=800&q=80',
+      },
+    ] as ProductColor[],
     stockQuantity: 25,
     sku: 'MM-KID-101',
     lowStockThreshold: 5,
@@ -282,12 +287,13 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
     ],
   });
 
-  // Image upload and drag & drop state
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  // Color Image upload and drag & drop state
+  const colorFileInputRef = useRef<HTMLInputElement>(null);
+  const [activeColorUploadIndex, setActiveColorUploadIndex] = useState<number | null>(null);
+  const [colorDraggingIndex, setColorDraggingIndex] = useState<number | null>(null);
   const [isProcessingImage, setIsProcessingImage] = useState(false);
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
-  const [showUrlFallback, setShowUrlFallback] = useState(false);
+  const [showColorUrlFallback, setShowColorUrlFallback] = useState<Record<number, boolean>>({});
 
   // Size editing state
   const [customSizeInput, setCustomSizeInput] = useState('');
@@ -347,46 +353,119 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
     setEditingSizeText('');
   };
 
-  // Image Upload handler (processes file, scales/compresses, sets preview)
-  const handleFileUpload = async (file: File) => {
+  // Color Image Upload handlers
+  const handleTriggerColorUpload = (index: number) => {
+    setActiveColorUploadIndex(index);
     setImageUploadError(null);
-    setIsProcessingImage(true);
-    try {
-      const dataUrl = await processUploadedImage(file);
-      setProductForm((prev) => ({ ...prev, imageUrl: dataUrl }));
-    } catch (err: any) {
-      setImageUploadError(err.message || 'Error processing photo. Please select another image.');
-    } finally {
-      setIsProcessingImage(false);
+    if (colorFileInputRef.current) {
+      colorFileInputRef.current.value = '';
+      colorFileInputRef.current.click();
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
+  const handleColorFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0 && activeColorUploadIndex !== null) {
+      const file = e.target.files[0];
+      const targetIndex = activeColorUploadIndex;
+      setImageUploadError(null);
+      setIsProcessingImage(true);
+      try {
+        const dataUrl = await processUploadedImage(file);
+        setProductForm((prev) => {
+          const nextColors = [...prev.colors];
+          if (nextColors[targetIndex]) {
+            nextColors[targetIndex] = {
+              ...nextColors[targetIndex],
+              image: dataUrl,
+            };
+          }
+          return { ...prev, colors: nextColors };
+        });
+      } catch (err: any) {
+        setImageUploadError(err.message || 'Error processing photo. Please select another image.');
+      } finally {
+        setIsProcessingImage(false);
+        e.target.value = '';
+      }
+    }
   };
 
-  const handleDragLeave = (e: React.DragEvent) => {
+  const handleColorDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    setColorDraggingIndex(index);
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
+  const handleColorDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    setColorDraggingIndex(null);
+  };
+
+  const handleColorDrop = async (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setColorDraggingIndex(null);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      await handleFileUpload(e.dataTransfer.files[0]);
+      const file = e.dataTransfer.files[0];
+      setImageUploadError(null);
+      setIsProcessingImage(true);
+      try {
+        const dataUrl = await processUploadedImage(file);
+        setProductForm((prev) => {
+          const nextColors = [...prev.colors];
+          if (nextColors[index]) {
+            nextColors[index] = {
+              ...nextColors[index],
+              image: dataUrl,
+            };
+          }
+          return { ...prev, colors: nextColors };
+        });
+      } catch (err: any) {
+        setImageUploadError(err.message || 'Error processing photo. Please select another image.');
+      } finally {
+        setIsProcessingImage(false);
+      }
     }
   };
 
-  const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      await handleFileUpload(e.target.files[0]);
-      e.target.value = ''; // Reset input so same file can be re-selected if needed
+  const handleUpdateColor = (index: number, updates: Partial<ProductColor>) => {
+    setProductForm((prev) => {
+      const nextColors = [...prev.colors];
+      if (nextColors[index]) {
+        nextColors[index] = {
+          ...nextColors[index],
+          ...updates,
+        };
+      }
+      return { ...prev, colors: nextColors };
+    });
+  };
+
+  const handleAddColor = () => {
+    setProductForm((prev) => ({
+      ...prev,
+      colors: [
+        ...prev.colors,
+        {
+          name: '',
+          hex: '#1E1E1E',
+          image: '',
+        },
+      ],
+    }));
+  };
+
+  const handleRemoveColor = (index: number) => {
+    if (productForm.colors.length <= 1) {
+      setImageUploadError('Every article must have at least one color.');
+      return;
     }
+    setProductForm((prev) => ({
+      ...prev,
+      colors: prev.colors.filter((_, i) => i !== index),
+    }));
   };
 
   // Size manipulation helper methods
@@ -440,7 +519,7 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
   const handleOpenAddModal = () => {
     setEditingProductId(null);
     setImageUploadError(null);
-    setShowUrlFallback(false);
+    setShowColorUrlFallback({});
     setCustomSizeInput('');
     setProductForm({
       name: '',
@@ -453,9 +532,13 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
       category: 'casual-shirts',
       sizes: ['2-3Y', '3-4Y', '4-5Y', '5-6Y'],
       fabric: '100% Combed Pakistani Cotton',
-      imageUrl: '',
-      colorName: 'Sunset Coral',
-      colorHex: '#E84D3D',
+      colors: [
+        {
+          name: 'Sunset Coral',
+          hex: '#E84D3D',
+          image: '',
+        },
+      ],
       stockQuantity: 25,
       sku: `MM-KID-${Math.floor(100 + Math.random() * 900)}`,
       lowStockThreshold: 5,
@@ -474,8 +557,25 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
   const handleOpenEditModal = (product: Product) => {
     setEditingProductId(product.id);
     setImageUploadError(null);
-    setShowUrlFallback(false);
+    setShowColorUrlFallback({});
     setCustomSizeInput('');
+
+    // Load ALL existing colors into the editor without losing any
+    const loadedColors: ProductColor[] =
+      product.colors && product.colors.length > 0
+        ? product.colors.map((c) => ({
+            name: c.name || 'Standard',
+            hex: c.hex || '#E84D3D',
+            image: c.image || product.images[0] || '',
+          }))
+        : [
+            {
+              name: 'Standard',
+              hex: '#E84D3D',
+              image: product.images[0] || '',
+            },
+          ];
+
     setProductForm({
       name: product.name,
       tagline: product.tagline,
@@ -495,9 +595,7 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
       ) as Category,
       sizes: product.sizes && product.sizes.length > 0 ? product.sizes : ['3-4Y', '5-6Y'],
       fabric: product.fabric,
-      imageUrl: product.images[0] || '',
-      colorName: product.colors[0]?.name || 'Natural',
-      colorHex: product.colors[0]?.hex || '#E84D3D',
+      colors: loadedColors,
       stockQuantity: product.stockQuantity ?? 20,
       sku: product.sku || `MM-${product.category.toUpperCase().slice(0, 3)}-${product.id.slice(-3)}`,
       lowStockThreshold: product.lowStockThreshold ?? 5,
@@ -512,14 +610,33 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
     e.preventDefault();
 
     if (productForm.sizes.length === 0) {
-      alert('Please select or add at least one available size for this garment before publishing.');
+      setImageUploadError('Please select or add at least one available size for this garment before publishing.');
       return;
     }
 
-    // Ensure there is an image (or fallback to elegant garment placeholder)
-    const finalImage =
-      productForm.imageUrl ||
-      'https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&w=800&q=80';
+    if (productForm.colors.length === 0) {
+      setImageUploadError('Please add at least one color for this garment before publishing.');
+      return;
+    }
+
+    const unnamedColorIndex = productForm.colors.findIndex((c) => !c.name.trim());
+    if (unnamedColorIndex !== -1) {
+      setImageUploadError(`Please enter a name for Color #${unnamedColorIndex + 1}.`);
+      return;
+    }
+
+    // Prepare colors payload
+    const finalColors = productForm.colors.map((c, i) => ({
+      name: c.name.trim(),
+      hex: c.hex.trim() || '#E84D3D',
+      image: c.image.trim() || FALLBACK_GARMENT_IMAGE,
+    }));
+
+    // Main product images array: unique color images without duplicates
+    const uniqueColorImages = Array.from(
+      new Set(finalColors.map((c) => c.image).filter(Boolean))
+    );
+    const finalImages = uniqueColorImages.length > 0 ? uniqueColorImages : [FALLBACK_GARMENT_IMAGE];
 
     const stockQty = Number(productForm.stockQuantity ?? 25);
     const productPayload = {
@@ -536,14 +653,8 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
       sku: productForm.sku || undefined,
       lowStockThreshold: Number(productForm.lowStockThreshold ?? 5),
       inStock: stockQty > 0,
-      colors: [
-        {
-          name: productForm.colorName,
-          hex: productForm.colorHex,
-          image: finalImage,
-        },
-      ],
-      images: [finalImage],
+      colors: finalColors,
+      images: finalImages,
       description: productForm.description,
       details: productForm.details,
       fabric: productForm.fabric,
@@ -938,6 +1049,24 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
                             <span className="text-[11px] text-neutral-400 line-clamp-1">
                               {prod.tagline}
                             </span>
+                            {/* Color swatches preview in admin list */}
+                            {prod.colors && prod.colors.length > 0 && (
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <div className="flex items-center -space-x-1">
+                                  {prod.colors.map((c, cIdx) => (
+                                    <span
+                                      key={cIdx}
+                                      className="w-3.5 h-3.5 rounded-full border border-white shadow-2xs inline-block"
+                                      style={{ backgroundColor: c.hex }}
+                                      title={c.name}
+                                    />
+                                  ))}
+                                </div>
+                                <span className="text-[10px] text-neutral-500 font-semibold">
+                                  {prod.colors.length} {prod.colors.length === 1 ? 'color' : 'colors'}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </td>
 
@@ -2298,179 +2427,275 @@ ${order.paymentReference || order.payment_reference ? `Payment Ref / TID: ${orde
                 </div>
               </div>
 
-              {/* Garment Image Upload & Color Swatch */}
-              <div className="space-y-3 p-4 rounded-2xl bg-neutral-50/80 border border-neutral-200/80">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                  <div>
-                    <label className="block font-bold uppercase tracking-wider text-neutral-800 text-xs">
-                      Garment Photograph *
-                    </label>
-                    <p className="text-[11px] text-neutral-500">
-                      Upload garment photo from your phone or computer.
-                    </p>
+              {/* Native hidden file input for color image uploads */}
+              <input
+                ref={colorFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleColorFileInputChange}
+                className="hidden"
+                id="garment-color-file-upload-input"
+              />
+
+              {/* Dynamic Product Colors Section */}
+              <div className="space-y-4 p-4 sm:p-5 rounded-2xl bg-neutral-50/90 border border-neutral-200/90 shadow-2xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-200/80 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-[#E84D3D] to-[#F5BE38] flex items-center justify-center text-white shrink-0 shadow-2xs">
+                      <Palette className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-neutral-900 flex items-center gap-2">
+                        <span>Product Colors & Photographs *</span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-neutral-200 text-neutral-700">
+                          {productForm.colors.length} {productForm.colors.length === 1 ? 'Color' : 'Colors'}
+                        </span>
+                      </h4>
+                      <p className="text-[11px] text-neutral-500">
+                        Add all colors of this article. Each color gets its own name, shade, and photograph.
+                      </p>
+                    </div>
                   </div>
+
                   <button
                     type="button"
-                    onClick={() => setShowUrlFallback(!showUrlFallback)}
-                    className="text-[11px] text-neutral-500 hover:text-neutral-900 underline flex items-center gap-1 self-start sm:self-auto cursor-pointer"
+                    onClick={handleAddColor}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#1E1E1E] hover:bg-black text-white text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
                   >
-                    <LinkIcon className="w-3 h-3" />
-                    <span>{showUrlFallback ? 'Switch to Upload Image' : 'Or paste web image URL'}</span>
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add Color</span>
                   </button>
                 </div>
 
-                {/* Native hidden file input */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileInputChange}
-                  className="hidden"
-                  id="garment-file-upload-input"
-                />
+                {imageUploadError && (
+                  <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                      <span>{imageUploadError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setImageUploadError(null)}
+                      className="text-red-500 hover:text-red-800 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
 
-                {!showUrlFallback ? (
-                  <div>
-                    {productForm.imageUrl ? (
-                      /* Preview of uploaded image with replace and remove actions */
-                      <div className="flex flex-col sm:flex-row items-center gap-4 p-3 bg-white rounded-xl border border-neutral-200 shadow-2xs">
-                        <div className="relative w-24 h-28 shrink-0 rounded-lg overflow-hidden bg-neutral-100 border border-neutral-200 shadow-xs">
-                          <img
-                            src={productForm.imageUrl}
-                            alt="Garment Preview"
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                            onError={() => {
-                              setImageUploadError('Garment photo preview failed to load. Please re-upload or select another photo.');
-                            }}
-                          />
-                        </div>
+                {/* List of Colors */}
+                <div className="space-y-4">
+                  {productForm.colors.map((c, cIdx) => {
+                    const isDraggingThis = colorDraggingIndex === cIdx;
+                    const isUrlMode = Boolean(showColorUrlFallback[cIdx]);
 
-                        <div className="flex-1 space-y-1.5 text-center sm:text-left">
-                          <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-green-700">
-                            <CheckCircle2 className="w-4 h-4 text-green-600" />
-                            <span>Photo uploaded & ready</span>
+                    return (
+                      <div
+                        key={cIdx}
+                        className="p-4 rounded-xl bg-white border border-neutral-200 shadow-2xs space-y-3 transition-all hover:border-neutral-300"
+                      >
+                        {/* Color Card Header */}
+                        <div className="flex items-center justify-between gap-2 border-b border-neutral-100 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-4 h-4 rounded-full border border-neutral-300 shadow-2xs shrink-0"
+                              style={{ backgroundColor: c.hex || '#E84D3D' }}
+                            />
+                            <span className="text-xs font-bold text-neutral-900">
+                              Color #{cIdx + 1}: {c.name ? c.name : <span className="italic text-neutral-400">Untitled Color</span>}
+                            </span>
+                            {cIdx === 0 && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-[#E84D3D]">
+                                Primary Shade
+                              </span>
+                            )}
                           </div>
-                          <p className="text-[11px] text-neutral-500">
-                            Garment photo is optimized and will appear on the catalog & product pages.
-                          </p>
-                          <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+
+                          {productForm.colors.length > 1 && (
                             <button
                               type="button"
-                              onClick={() => fileInputRef.current?.click()}
-                              className="px-3 py-1.5 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-neutral-800 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                            >
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>Replace Photo</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setProductForm((p) => ({ ...p, imageUrl: '' }))}
-                              className="px-3 py-1.5 rounded-lg text-red-600 hover:bg-red-50 text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              onClick={() => handleRemoveColor(cIdx)}
+                              className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded-lg transition-colors cursor-pointer"
+                              title="Remove this color"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                               <span>Remove</span>
                             </button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Drag & drop upload dropzone */
-                      <div
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        onClick={() => fileInputRef.current?.click()}
-                        className={`cursor-pointer border-2 border-dashed rounded-xl p-6 text-center transition-all flex flex-col items-center justify-center gap-2 ${
-                          isDragging
-                            ? 'border-[#E84D3D] bg-red-50/60 scale-[1.01]'
-                            : 'border-neutral-300 hover:border-[#E84D3D] bg-white hover:bg-neutral-50/60'
-                        }`}
-                      >
-                        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-[#E84D3D]">
-                          {isProcessingImage ? (
-                            <RefreshCw className="w-6 h-6 animate-spin" />
-                          ) : (
-                            <Upload className="w-6 h-6" />
                           )}
                         </div>
-                        <div className="space-y-0.5">
-                          <p className="text-xs font-bold text-neutral-800">
-                            {isProcessingImage
-                              ? 'Optimizing garment image...'
-                              : 'Click to upload image or drag & drop photo here'}
-                          </p>
-                          <p className="text-[11px] text-neutral-500">
-                            Supports PNG, JPG, WEBP, or HEIC (Auto-optimized for store speed)
-                          </p>
+
+                        {/* Color Name & Hex Inputs */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
+                              Color Name *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={c.name}
+                              onChange={(e) => handleUpdateColor(cIdx, { name: e.target.value })}
+                              placeholder="e.g. White, Black, Brown, Navy Blue"
+                              className="w-full px-3 py-2 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] text-xs font-semibold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700 mb-1">
+                              Color Hex Shade *
+                            </label>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="color"
+                                value={c.hex || '#E84D3D'}
+                                onChange={(e) => handleUpdateColor(cIdx, { hex: e.target.value })}
+                                className="w-9 h-9 rounded-xl border border-neutral-200 p-0.5 cursor-pointer bg-white shrink-0"
+                                title="Pick color hex"
+                              />
+                              <input
+                                type="text"
+                                value={c.hex}
+                                onChange={(e) => handleUpdateColor(cIdx, { hex: e.target.value })}
+                                placeholder="#FFFFFF"
+                                className="flex-1 px-3 py-2 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] text-xs font-mono"
+                              />
+                            </div>
+                          </div>
                         </div>
-                        <span className="inline-flex items-center gap-1 mt-1 px-3 py-1 rounded-full bg-neutral-100 text-neutral-700 text-[10px] font-bold uppercase tracking-wider">
-                          <FileUp className="w-3 h-3 text-neutral-500" />
-                          <span>Browse Device / Photos</span>
-                        </span>
-                      </div>
-                    )}
 
-                    {imageUploadError && (
-                      <p className="text-xs text-red-600 font-medium mt-2 flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                        <span>{imageUploadError}</span>
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  /* Web Image URL fallback */
-                  <div className="space-y-2">
-                    <input
-                      type="url"
-                      placeholder="https://example.com/garment-photo.jpg"
-                      value={productForm.imageUrl}
-                      onChange={(e) =>
-                        setProductForm({ ...productForm, imageUrl: e.target.value })
-                      }
-                      className="w-full px-3 py-2 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] bg-white text-xs"
-                    />
-                    {productForm.imageUrl && (
-                      <div className="flex items-center gap-3 p-2 bg-white rounded-lg border border-neutral-200">
-                        <img
-                          src={productForm.imageUrl}
-                          alt="Preview"
-                          className="w-12 h-14 object-cover rounded-md"
-                          referrerPolicy="no-referrer"
-                          onError={() => setImageUploadError('Image failed to load from this URL.')}
-                        />
-                        <span className="text-[11px] text-neutral-500">URL preview</span>
-                      </div>
-                    )}
-                  </div>
-                )}
+                        {/* Color Photograph Upload / Preview */}
+                        <div className="pt-2 border-t border-neutral-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-[11px] font-bold uppercase tracking-wider text-neutral-700">
+                              Photograph for {c.name || `Color #${cIdx + 1}`} *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowColorUrlFallback((prev) => ({
+                                  ...prev,
+                                  [cIdx]: !prev[cIdx],
+                                }))
+                              }
+                              className="text-[11px] text-neutral-500 hover:text-neutral-900 underline flex items-center gap-1 cursor-pointer"
+                            >
+                              <LinkIcon className="w-3 h-3" />
+                              <span>{isUrlMode ? 'Switch to Upload' : 'Paste Image URL'}</span>
+                            </button>
+                          </div>
 
-                {/* Color Name & Swatch */}
-                <div className="pt-2 border-t border-neutral-200/60">
-                  <label className="block font-bold uppercase tracking-wider text-neutral-700 text-xs mb-1.5">
-                    Garment Color & Tone
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={productForm.colorHex}
-                      onChange={(e) =>
-                        setProductForm({ ...productForm, colorHex: e.target.value })
-                      }
-                      className="w-9 h-9 rounded-xl border border-neutral-200 p-0.5 cursor-pointer bg-white"
-                      title="Select garment hex color"
-                    />
-                    <input
-                      type="text"
-                      value={productForm.colorName}
-                      onChange={(e) =>
-                        setProductForm({ ...productForm, colorName: e.target.value })
-                      }
-                      placeholder="e.g. Sunset Coral or Powder Mint"
-                      className="flex-1 px-3 py-2 rounded-xl border border-neutral-200 outline-none bg-white text-xs"
-                    />
-                  </div>
+                          {isUrlMode ? (
+                            <div className="space-y-2">
+                              <input
+                                type="url"
+                                placeholder={`https://example.com/${c.name ? c.name.toLowerCase().replace(/\s+/g, '-') : 'garment'}-photo.jpg`}
+                                value={c.image}
+                                onChange={(e) => handleUpdateColor(cIdx, { image: e.target.value })}
+                                className="w-full px-3 py-2 rounded-xl border border-neutral-200 outline-none focus:ring-2 focus:ring-[#E84D3D] text-xs"
+                              />
+                              {c.image && (
+                                <div className="flex items-center gap-3 p-2 bg-neutral-50 rounded-xl border border-neutral-200">
+                                  <img
+                                    src={c.image}
+                                    alt={c.name}
+                                    className="w-12 h-14 object-cover rounded-lg border border-neutral-200"
+                                    onError={() =>
+                                      setImageUploadError(`Image failed to load for color "${c.name}".`)
+                                    }
+                                  />
+                                  <span className="text-[11px] text-neutral-500 font-medium">
+                                    URL Image Preview for {c.name}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          ) : c.image ? (
+                            /* Uploaded preview */
+                            <div className="flex flex-col sm:flex-row items-center gap-3 p-3 bg-neutral-50 rounded-xl border border-neutral-200">
+                              <div className="relative w-20 h-24 shrink-0 rounded-lg overflow-hidden bg-white border border-neutral-200 shadow-2xs">
+                                <img
+                                  src={c.image}
+                                  alt={c.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = FALLBACK_GARMENT_IMAGE;
+                                  }}
+                                />
+                              </div>
+
+                              <div className="flex-1 space-y-1 text-center sm:text-left">
+                                <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-emerald-700">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>{c.name ? `${c.name} photo ready` : 'Photo uploaded & ready'}</span>
+                                </div>
+                                <p className="text-[11px] text-neutral-500">
+                                  This photo will automatically display when customers choose {c.name ? `"${c.name}"` : 'this color'}.
+                                </p>
+                                <div className="flex items-center justify-center sm:justify-start gap-2 pt-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleTriggerColorUpload(cIdx)}
+                                    className="px-2.5 py-1 rounded-lg bg-white hover:bg-neutral-100 border border-neutral-200 text-neutral-800 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                                  >
+                                    <Upload className="w-3 h-3" />
+                                    <span>Replace</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateColor(cIdx, { image: '' })}
+                                    className="px-2.5 py-1 rounded-lg text-red-600 hover:bg-red-50 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                    <span>Remove Photo</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            /* Dropzone for this color */
+                            <div
+                              onDragOver={(e) => handleColorDragOver(e, cIdx)}
+                              onDragLeave={handleColorDragLeave}
+                              onDrop={(e) => handleColorDrop(e, cIdx)}
+                              onClick={() => handleTriggerColorUpload(cIdx)}
+                              className={`cursor-pointer border-2 border-dashed rounded-xl p-4 text-center transition-all flex flex-col items-center justify-center gap-1.5 ${
+                                isDraggingThis
+                                  ? 'border-[#E84D3D] bg-red-50/60 scale-[1.01]'
+                                  : 'border-neutral-200 hover:border-[#E84D3D] bg-neutral-50/50 hover:bg-neutral-50'
+                              }`}
+                            >
+                              <div className="w-9 h-9 rounded-full bg-white shadow-2xs border border-neutral-200 flex items-center justify-center text-[#E84D3D]">
+                                {isProcessingImage && activeColorUploadIndex === cIdx ? (
+                                  <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Upload className="w-4 h-4" />
+                                )}
+                              </div>
+                              <p className="text-xs font-bold text-neutral-800">
+                                {isProcessingImage && activeColorUploadIndex === cIdx
+                                  ? 'Optimizing photo...'
+                                  : `Upload ${c.name ? `"${c.name}"` : 'Color'} Photograph`}
+                              </p>
+                              <p className="text-[10px] text-neutral-400">
+                                Drag & drop or click to browse device (PNG, JPG, WEBP)
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* Add Another Color Button */}
+                <button
+                  type="button"
+                  onClick={handleAddColor}
+                  className="w-full py-3 rounded-xl border-2 border-dashed border-neutral-300 hover:border-neutral-900 bg-white hover:bg-neutral-50 text-neutral-700 hover:text-neutral-900 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Add Another Color to this Article</span>
+                </button>
               </div>
 
               {/* Fabric & Description */}
