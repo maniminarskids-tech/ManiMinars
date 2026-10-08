@@ -85,6 +85,7 @@ export interface Product {
   stockQuantity?: number;
   lowStockThreshold?: number;
   inStock?: boolean;
+  createdAt?: string;
 }
 
 export interface CartItem {

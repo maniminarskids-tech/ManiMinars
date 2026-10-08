@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
@@ -6,6 +6,7 @@ import Filters from '../components/Filters';
 import ProductGrid from '../components/ProductGrid';
 import { useProducts } from '../context/ProductContext';
 import { useFilteredProducts } from '../hooks/useFilteredProducts';
+import { getCategoryPreviewProducts } from '../utils/categoryPreview';
 import { ArrowRight, Zap } from 'lucide-react';
 
 export const JuniorsPage: React.FC = () => {
@@ -13,6 +14,37 @@ export const JuniorsPage: React.FC = () => {
   const juniorsProducts = products.filter((p) => p.ageGroup === 'juniors');
   const { filters, setFilters, sortBy, setSortBy, filteredProducts, resetFilters } =
     useFilteredProducts(juniorsProducts, 'juniors');
+
+  // Category Preview Mode:
+  // When selected category is 'All Pieces' (filters.category === 'all'),
+  // show only the latest 2 products per category.
+  const isCategoryPreview = !filters.category || filters.category === 'all';
+
+  const displayedProducts = useMemo(() => {
+    if (isCategoryPreview) {
+      // Group by category, pick latest 2 per category
+      const preview = getCategoryPreviewProducts(filteredProducts, 2);
+
+      // Preserve the user's active sort order across the selected preview products
+      switch (sortBy) {
+        case 'newest':
+          return [...preview].sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+          });
+        case 'price-low':
+          return [...preview].sort((a, b) => a.price - b.price);
+        case 'price-high':
+          return [...preview].sort((a, b) => b.price - a.price);
+        case 'featured':
+        default:
+          return [...preview].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      }
+    }
+    // When a specific category is selected, show ALL products belonging to that category
+    return filteredProducts;
+  }, [filteredProducts, isCategoryPreview, sortBy]);
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FAF9F6]">
@@ -70,13 +102,14 @@ export const JuniorsPage: React.FC = () => {
           onFilterChange={setFilters}
           sortBy={sortBy}
           onSortChange={setSortBy}
-          totalResults={filteredProducts.length}
+          totalResults={displayedProducts.length}
           fixedAgeGroup="juniors"
+          isCategoryPreview={isCategoryPreview}
         />
 
         {/* Product Grid */}
         <ProductGrid
-          products={filteredProducts}
+          products={displayedProducts}
           isLoading={isLoading}
           onResetFilters={resetFilters}
         />

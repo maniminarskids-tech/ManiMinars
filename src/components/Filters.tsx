@@ -10,6 +10,7 @@ interface FiltersProps {
   onSortChange: (sort: SortOption) => void;
   totalResults: number;
   fixedAgeGroup?: 'kids' | 'juniors';
+  isCategoryPreview?: boolean;
 }
 
 export const Filters: React.FC<FiltersProps> = ({
@@ -19,6 +20,7 @@ export const Filters: React.FC<FiltersProps> = ({
   onSortChange,
   totalResults,
   fixedAgeGroup,
+  isCategoryPreview,
 }) => {
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
 
@@ -94,9 +96,16 @@ export const Filters: React.FC<FiltersProps> = ({
             )}
           </button>
 
-          <span className="text-xs text-neutral-500 font-medium">
-            Showing <strong className="text-neutral-900">{totalResults}</strong> items
-          </span>
+          <div className="flex flex-col">
+            <span className="text-xs text-neutral-500 font-medium">
+              Showing <strong className="text-neutral-900">{totalResults}</strong> items
+            </span>
+            {isCategoryPreview && (
+              <span className="text-[11px] text-[#E84D3D] font-medium tracking-tight">
+                Showing category highlights
+              </span>
+            )}
+          </div>
 
           {hasActiveFilters && (
             <button

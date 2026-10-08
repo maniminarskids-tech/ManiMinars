@@ -136,6 +136,7 @@ export function rowToProduct(row: any): Product {
     stockQuantity: stock,
     lowStockThreshold: Number(row.low_stock_threshold ?? row.lowStockThreshold) || 5,
     inStock: Boolean(row.in_stock ?? row.inStock ?? stock > 0),
+    createdAt: row.created_at || row.createdAt || undefined,
   };
 }
 
@@ -770,6 +771,7 @@ useEffect(() => {
       })),
       stockQuantity: typeof newProductData.stockQuantity === 'number' ? newProductData.stockQuantity : 15,
       inStock: (newProductData.stockQuantity ?? 15) > 0,
+      createdAt: new Date().toISOString(),
     };
 
     // Optimistically update local view immediately
