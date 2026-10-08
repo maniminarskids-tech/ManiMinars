@@ -9,7 +9,7 @@ import { useFilteredProducts } from '../hooks/useFilteredProducts';
 import { Sparkles } from 'lucide-react';
 
 export const NewArrivalsPage: React.FC = () => {
-  const { products } = useProducts();
+  const { products, isLoading } = useProducts();
   const newProducts = products.filter((p) => p.isNew);
   const { filters, setFilters, sortBy, setSortBy, filteredProducts, resetFilters } =
     useFilteredProducts(newProducts);
@@ -52,7 +52,11 @@ export const NewArrivalsPage: React.FC = () => {
           totalResults={filteredProducts.length}
         />
 
-        <ProductGrid products={filteredProducts} onResetFilters={resetFilters} />
+        <ProductGrid
+          products={filteredProducts}
+          isLoading={isLoading}
+          onResetFilters={resetFilters}
+        />
       </main>
 
       <Footer />

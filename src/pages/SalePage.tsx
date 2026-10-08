@@ -9,7 +9,7 @@ import { useFilteredProducts } from '../hooks/useFilteredProducts';
 import { Tag } from 'lucide-react';
 
 export const SalePage: React.FC = () => {
-  const { products } = useProducts();
+  const { products, isLoading } = useProducts();
   const saleProducts = products.filter((p) => p.isSale);
   const { filters, setFilters, sortBy, setSortBy, filteredProducts, resetFilters } =
     useFilteredProducts(saleProducts);
@@ -52,7 +52,11 @@ export const SalePage: React.FC = () => {
           totalResults={filteredProducts.length}
         />
 
-        <ProductGrid products={filteredProducts} onResetFilters={resetFilters} />
+        <ProductGrid
+          products={filteredProducts}
+          isLoading={isLoading}
+          onResetFilters={resetFilters}
+        />
       </main>
 
       <Footer />

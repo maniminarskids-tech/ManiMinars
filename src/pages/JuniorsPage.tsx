@@ -9,7 +9,7 @@ import { useFilteredProducts } from '../hooks/useFilteredProducts';
 import { ArrowRight, Zap } from 'lucide-react';
 
 export const JuniorsPage: React.FC = () => {
-  const { products } = useProducts();
+  const { products, isLoading } = useProducts();
   const juniorsProducts = products.filter((p) => p.ageGroup === 'juniors');
   const { filters, setFilters, sortBy, setSortBy, filteredProducts, resetFilters } =
     useFilteredProducts(juniorsProducts, 'juniors');
@@ -75,7 +75,11 @@ export const JuniorsPage: React.FC = () => {
         />
 
         {/* Product Grid */}
-        <ProductGrid products={filteredProducts} onResetFilters={resetFilters} />
+        <ProductGrid
+          products={filteredProducts}
+          isLoading={isLoading}
+          onResetFilters={resetFilters}
+        />
       </main>
 
       <Footer />
