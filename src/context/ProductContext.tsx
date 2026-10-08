@@ -319,18 +319,18 @@ export function rowToOrder(row: any): Order {
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
 export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Products state: loads products directly from Supabase (empty array default, no mock/fallback data)
+  // 1. Products state: loads products exclusively from Supabase (empty array default, no localStorage caching or fallback)
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
-  const isInitialMount = useRef(true);
 
-  // Helper: Persist local cache
-  const saveToLocalCache = useCallback((prods: Product[]) => {
+  // Clean up any legacy product cache from localStorage if present
+  useEffect(() => {
     try {
-      localStorage.setItem('mani_minars_products_v2', JSON.stringify(prods));
-    } catch (e) {
-      console.error('Error saving products cache', e);
+      localStorage.removeItem('mani_minars_products_v2');
+      localStorage.removeItem('mani_minars_products_v1');
+    } catch {
+      // Ignore localStorage errors
     }
   }, []);
 
@@ -362,14 +362,13 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const loaded = Array.isArray(data) ? sanitizeProducts(data.map(rowToProduct)) : [];
       setProducts(loaded);
-      saveToLocalCache(loaded);
     } catch (err) {
       console.error('Failed to sync products with Supabase:', err);
       setIsCloudConnected(false);
     } finally {
       setIsLoading(false);
     }
-  }, [saveToLocalCache]);
+  }, []);
 
   // 3. Mount effect: load from Supabase and subscribe to real-time events across all devices
   useEffect(() => {
@@ -391,24 +390,14 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
               if (prev.some((p) => p.id === newProd.id)) {
                 return prev.map((p) => (p.id === newProd.id ? newProd : p));
               }
-              const updated = [newProd, ...prev];
-              saveToLocalCache(updated);
-              return updated;
+              return [newProd, ...prev];
             });
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             const updatedProd = rowToProduct(payload.new);
-            setProducts((prev) => {
-              const updated = prev.map((p) => (p.id === updatedProd.id ? updatedProd : p));
-              saveToLocalCache(updated);
-              return updated;
-            });
+            setProducts((prev) => prev.map((p) => (p.id === updatedProd.id ? updatedProd : p)));
           } else if (payload.eventType === 'DELETE' && payload.old) {
             const deletedId = String(payload.old.id);
-            setProducts((prev) => {
-              const updated = prev.filter((p) => p.id !== deletedId);
-              saveToLocalCache(updated);
-              return updated;
-            });
+            setProducts((prev) => prev.filter((p) => p.id !== deletedId));
           }
         }
       )
@@ -421,16 +410,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [refreshProducts, saveToLocalCache]);
-
-  // Sync state to local cache when updated locally
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    saveToLocalCache(products);
-  }, [products, saveToLocalCache]);
+  }, [refreshProducts]);
 
   // 4. Orders state: Supabase is the source of truth, loaded via refreshOrders()
   const [orders, setOrders] = useState<Order[]>(() => {
