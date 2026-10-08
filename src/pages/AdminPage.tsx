@@ -999,10 +999,10 @@ const [loadingProofOrderId, setLoadingProofOrderId] =
                 <button
                   onClick={resetProductsToDefault}
                   className="text-xs text-neutral-500 hover:text-neutral-800 flex items-center gap-1.5 px-3 py-2 rounded-xl border border-neutral-200 bg-neutral-50"
-                  title="Restore default catalog"
+                  title="Re-sync products directly from Supabase"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Restore Initial Catalog</span>
+                  <span>Sync Catalog from Supabase</span>
                 </button>
               </div>
             </div>

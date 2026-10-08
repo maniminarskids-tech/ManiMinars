@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { Product, Order, OrderStatus, DeliverySettings, AgeGroup, Category } from '../types';
-import { PRODUCTS as DEFAULT_PRODUCTS } from '../data/products';
 import { getSupabase, isSupabaseConfigured } from '../services/supabase';
 import { toLightweightOrderItems } from '../utils/orderUtils';
 
@@ -65,7 +64,7 @@ export function sanitizeGarmentImageUrl(url: string | undefined): string {
 }
 
 export function sanitizeProducts(prods: Product[]): Product[] {
-  if (!Array.isArray(prods) || prods.length === 0) return DEFAULT_PRODUCTS;
+  if (!Array.isArray(prods) || prods.length === 0) return [];
   return prods.map((p, idx) => {
     const stock = typeof p.stockQuantity === 'number' ? p.stockQuantity : Math.max(4, 20 - idx * 2);
     return {
@@ -317,129 +316,11 @@ export function rowToOrder(row: any): Order {
   };
 }
 
-// Initial realistic Pakistani mock orders for the admin portal
-const INITIAL_ORDERS: Order[] = [
-  {
-    id: 'MM-94821',
-    createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-    customer: {
-      fullName: 'Ayesha Tariq',
-      phone: '+923004829182',
-      email: 'ayesha.tariq@gmail.com',
-      city: 'Lahore',
-      address: 'House 14-B, Gulberg III',
-      notes: 'Please ring bell twice upon arrival',
-    },
-    items: [
-      {
-        id: 'cart-1',
-        productId: 'kids-cotton-set',
-        product: DEFAULT_PRODUCTS[0],
-        selectedSize: '3–4Y',
-        selectedColor: { name: 'Sunset Coral', hex: '#E84D3D' },
-        quantity: 1,
-        price: 2450,
-      },
-      {
-        id: 'cart-2',
-        productId: 'kids-rainbow-dress',
-        product: DEFAULT_PRODUCTS[1],
-        selectedSize: '4–5Y',
-        selectedColor: { name: 'Warm Marigold', hex: '#F5BE38' },
-        quantity: 1,
-        price: 3200,
-      },
-    ],
-    subtotal: 5650,
-    deliveryFee: 0,
-    discount: 0,
-    total: 5650,
-    paymentMethod: 'bank_transfer',
-    paymentReference: 'MB-948210341',
-    status: 'Approved',
-    trackingNumber: 'TRX-7482910',
-    courier: 'Trax Logistics',
-  },
-  {
-    id: 'MM-94822',
-    createdAt: new Date(Date.now() - 3600000 * 20).toISOString(),
-    customer: {
-      fullName: 'Kamran Ali Khan',
-      phone: '+923219482019',
-      email: 'kamran.khan@yahoo.com',
-      city: 'Karachi',
-      address: 'Apartment 402, Creek Vistas, Phase 8, DHA',
-    },
-    items: [
-      {
-        id: 'cart-3',
-        productId: 'juniors-varsity-jacket',
-        product: DEFAULT_PRODUCTS[6],
-        selectedSize: '13–14Y',
-        selectedColor: { name: 'Goldenrod & Black', hex: '#F5BE38' },
-        quantity: 1,
-        price: 5450,
-      },
-    ],
-    subtotal: 5450,
-    deliveryFee: 0,
-    discount: 0,
-    total: 5450,
-    paymentMethod: 'raast',
-    paymentReference: 'RAAST-84920192',
-    status: 'delivered',
-    trackingNumber: 'TCS-902184',
-    courier: 'TCS Express',
-  },
-  {
-    id: 'MM-94823',
-    createdAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    customer: {
-      fullName: 'Zainab Bilal',
-      phone: '+923335198273',
-      email: 'zainab.b@hotmail.com',
-      city: 'Islamabad',
-      address: 'Street 9, Sector F-7/2',
-      notes: 'Call before dispatching rider',
-    },
-    items: [
-      {
-        id: 'cart-4',
-        productId: 'juniors-cargo-pant',
-        product: DEFAULT_PRODUCTS[7],
-        selectedSize: '11–12Y',
-        selectedColor: { name: 'Utility Olive', hex: '#5B6E52' },
-        quantity: 2,
-        price: 3450,
-      },
-    ],
-    subtotal: 6900,
-    deliveryFee: 0,
-    discount: 0,
-    total: 6900,
-    paymentMethod: 'bank_transfer',
-    paymentReference: 'MB-38190284',
-    status: 'Pending Verification',
-  },
-];
-
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
 export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Products state: loads from cache initially for fast render, then synchronizes with Supabase
-  const [products, setProducts] = useState<Product[]>(() => {
-    try {
-      const stored = localStorage.getItem('mani_minars_products_v2');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        return sanitizeProducts(parsed);
-      }
-    } catch (e) {
-      console.error('Error loading products from local storage fallback:', e);
-    }
-    return DEFAULT_PRODUCTS;
-  });
-
+  // 1. Products state: loads products directly from Supabase (empty array default, no mock/fallback data)
+  const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isCloudConnected, setIsCloudConnected] = useState<boolean>(false);
   const isInitialMount = useRef(true);
@@ -453,7 +334,8 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, []);
 
-  // 2. Fetch products from Supabase
+  // 2. Fetch products exclusively from Supabase
+  // Optimized query: fetches active catalog sorted by creation date with limit
   const refreshProducts = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) {
@@ -467,33 +349,20 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const { data, error } = await supabase
         .from('products')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       if (error) {
-        console.warn('Supabase query error, retaining cached catalog:', error.message);
+        console.error('Supabase products fetch error:', error.message);
         setIsCloudConnected(false);
         return;
       }
 
       setIsCloudConnected(true);
 
-      if (!data || data.length === 0) {
-        // Table is empty on fresh Supabase setup: auto-seed catalog from defaults
-        console.info('Fresh Supabase setup detected. Auto-seeding initial catalog to Supabase...');
-        const seedRows = DEFAULT_PRODUCTS.map(productToRow);
-        const { error: seedError } = await supabase.from('products').upsert(seedRows);
-        if (seedError) {
-          console.error('Error auto-seeding products into Supabase:', seedError);
-        } else {
-          console.info('Auto-seeded products to Supabase successfully!');
-          setProducts(DEFAULT_PRODUCTS);
-          saveToLocalCache(DEFAULT_PRODUCTS);
-        }
-      } else {
-        const loaded = sanitizeProducts(data.map(rowToProduct));
-        setProducts(loaded);
-        saveToLocalCache(loaded);
-      }
+      const loaded = Array.isArray(data) ? sanitizeProducts(data.map(rowToProduct)) : [];
+      setProducts(loaded);
+      saveToLocalCache(loaded);
     } catch (err) {
       console.error('Failed to sync products with Supabase:', err);
       setIsCloudConnected(false);
@@ -1075,22 +944,9 @@ useEffect(() => {
     }
   };
 
-  // 11. Reset to default catalog
+  // 11. Refresh / Sync catalog with Supabase
   const resetProductsToDefault = async () => {
-    setProducts(DEFAULT_PRODUCTS);
-    saveToLocalCache(DEFAULT_PRODUCTS);
-
-    const supabase = getSupabase();
-    if (supabase) {
-      try {
-        // Delete existing and insert defaults
-        await supabase.from('products').delete().neq('id', 'placeholder_non_existent');
-        const rows = DEFAULT_PRODUCTS.map(productToRow);
-        await supabase.from('products').upsert(rows);
-      } catch (err) {
-        console.error('Error resetting products in Supabase:', err);
-      }
-    }
+    await refreshProducts();
   };
 
   // Orders methods - fully integrated with Supabase and real-time syncing

@@ -128,8 +128,11 @@ export default function MyOrdersPage() {
 
       const { data, error } = await supabase
         .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select(
+          'id, order_id, customer_name, phone, address, city, notes, subtotal, total_amount, payment_method, payment_reference, payment_status, payment_proof_url, payment_proof_image, status, created_at, items, products_json'
+        )
+        .order('created_at', { ascending: false })
+        .limit(50);
 
       if (error) {
         console.error('Error fetching orders directly from Supabase:', error);
