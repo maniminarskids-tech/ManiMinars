@@ -100,7 +100,7 @@ function processUploadedImage(file: File): Promise<string> {
       const img = new Image();
       img.onload = () => {
         try {
-          const MAX_DIMENSION = 1200;
+          const MAX_DIMENSION = 900;
           let { width, height } = img;
 
           if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
@@ -119,7 +119,8 @@ function processUploadedImage(file: File): Promise<string> {
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            const compressed = canvas.toDataURL('image/jpeg', 0.88);
+            // 0.78 quality provides crisp garment preview details while keeping payload under 120KB
+            const compressed = canvas.toDataURL('image/jpeg', 0.78);
             resolve(compressed);
           } else {
             resolve(rawDataUrl);

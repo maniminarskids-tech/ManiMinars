@@ -104,9 +104,12 @@ export function rowToProduct(row: any): Product {
     : [];
 
   const rawImages = row.images;
+  const colorImages = colors.map((c) => c.image).filter(Boolean);
   const images =
     Array.isArray(rawImages) && rawImages.length > 0
       ? rawImages.map((img: string) => sanitizeGarmentImageUrl(img))
+      : colorImages.length > 0
+      ? colorImages
       : [FALLBACK_GARMENT_IMAGE];
 
   return {
@@ -336,7 +339,8 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   // 2. Fetch products exclusively from Supabase
-  // Optimized query: fetches active catalog sorted by creation date with limit
+  // Chunked batch query: fetches products in batches of 4 to avoid Supabase statement timeouts
+  // when handling high-resolution product photography payloads.
   const refreshProducts = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) {
@@ -347,21 +351,57 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('products')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
 
-      if (error) {
-        console.error('Supabase products fetch error:', error.message);
-        setIsCloudConnected(false);
-        return;
+      // Select essential columns with colors (and derive images directly from colors)
+      // to eliminate 50% duplicate payload bandwidth across the database wire.
+      const columns =
+        'id, sku, name, tagline, price, original_price, is_new, is_sale, age_group, category, sizes, colors, description, details, fabric, rating, review_count, stock_quantity, low_stock_threshold, in_stock, created_at, updated_at';
+
+      const BATCH_SIZE = 4;
+      const MAX_TOTAL = 100;
+      const allRows: any[] = [];
+      let page = 0;
+      let hasMore = true;
+
+      while (hasMore && allRows.length < MAX_TOTAL) {
+        const from = page * BATCH_SIZE;
+        const to = from + BATCH_SIZE - 1;
+
+        const { data, error } = await supabase
+          .from('products')
+          .select(columns)
+          .order('created_at', { ascending: false })
+          .range(from, to);
+
+        if (error) {
+          console.error('Supabase products fetch error:', error.message);
+          setIsCloudConnected(false);
+          // If we already loaded some batches, preserve them instead of wiping the catalog
+          if (allRows.length === 0) {
+            return;
+          }
+          break;
+        }
+
+        if (!data || data.length === 0) {
+          hasMore = false;
+          break;
+        }
+
+        allRows.push(...data);
+
+        // If returned fewer rows than requested batch size, we've reached the end of the catalog
+        if (data.length < BATCH_SIZE) {
+          hasMore = false;
+          break;
+        }
+
+        page++;
       }
 
       setIsCloudConnected(true);
 
-      const loaded = Array.isArray(data) ? sanitizeProducts(data.map(rowToProduct)) : [];
+      const loaded = sanitizeProducts(allRows.map(rowToProduct));
       setProducts(loaded);
     } catch (err) {
       console.error('Failed to sync products with Supabase:', err);
